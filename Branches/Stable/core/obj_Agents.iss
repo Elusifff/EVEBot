@@ -336,10 +336,13 @@ objectdef obj_Agents
 				{
 					if ${MissionBlacklist.IsBlacklisted[${Agent[id,${amIterator.Value.AgentID}].Level},"${amIterator.Value.Name}"]} == FALSE
 					{
+						UI:UpdateConsole["HELL CIRCUS 2"]
 						variable bool isLowSec
 						variable bool avoidLowSec
+						variable bool isGasHarvesting
 						isLowSec:Set[${Missions.MissionCache.LowSec[${amIterator.Value.AgentID}]}]
 						avoidLowSec:Set[${Config.Missioneer.AvoidLowSec}]
+						isGasHarvesting:Set[${Missions.MissionCache.GasHarvesting[${amIterator.Value.AgentID},${isGasHarvesting}]}]
 						if ${avoidLowSec} == FALSE || (${avoidLowSec} == TRUE && ${isLowSec} == FALSE)
 						{
 							if ${amIterator.Value.Type.Find[Courier](exists)} && ${Config.Missioneer.RunCourierMissions} == TRUE
@@ -354,8 +357,9 @@ objectdef obj_Agents
 								return
 							}
 
-							if ${amIterator.Value.Type.Find[Mining](exists)} && ${Config.Missioneer.RunMiningMissions} == TRUE
+							if ${amIterator.Value.Type.Find[Mining](exists)} && ${Config.Missioneer.RunMiningMissions} == TRUE && ${skipList.Contains[${Config.Agents.AgentID[${agentName}]}]} == FALSE
 							{
+								UI:UpdateConsole["HELL CIRCUS"]
 								This:SetActiveAgent[${Agent[id,${amIterator.Value.AgentID}].Name}]
 								return
 							}
@@ -369,7 +373,6 @@ objectdef obj_Agents
 						}
 
 						/* if we get here the mission is not acceptable */
-						variable time lastDecline
 						lastDecline:Set[${Config.Agents.LastDecline[${Agent[id,${amIterator.Value.AgentID}].Name}]}]
 						UI:UpdateConsole["obj_Agents: DEBUG: lastDecline = ${lastDecline}"]
 						lastDecline.Hour:Inc[4]
@@ -380,6 +383,21 @@ objectdef obj_Agents
 							skipList:Add[${amIterator.Value.AgentID}]
 							continue
 						}
+					}
+					else
+					; ???
+					{
+					variable time lastDecline
+					lastDecline:Set[${Config.Agents.LastDecline[${Agent[id,${amIterator.Value.AgentID}].Name}]}]
+					UI:UpdateConsole["obj_Agents: DEBUG: lastDecline = ${lastDecline}"]
+					lastDecline.Hour:Inc[4]
+					lastDecline:Update
+					if ${lastDecline.Timestamp} >= ${Time.Timestamp}
+					{
+						UI:UpdateConsole["obj_Agents: DEBUG: Skipping mission to avoid standing loss: ${amIterator.Value.Name}"]
+						skipList:Add[${amIterator.Value.AgentID}]
+						continue
+					}
 					}
 				}
 			}
@@ -504,7 +522,9 @@ objectdef obj_Agents
 					{
 						variable bool isLowSec
 						variable bool avoidLowSec
+						variable bool isGasHarvesting
 						isLowSec:Set[${Missions.MissionCache.LowSec[${amIterator.Value.AgentID}]}]
+						isGasHarvesting:Set[${Missions.MissionCache.GasHarvesting[${amIterator.Value.AgentID},${isGasHarvesting}]}]
 						avoidLowSec:Set[${Config.Missioneer.AvoidLowSec}]
 						if ${avoidLowSec} == FALSE || (${avoidLowSec} == TRUE && ${isLowSec} == FALSE)
 						{
@@ -697,7 +717,7 @@ objectdef obj_Agents
 		;EVE:Execute[OpenJournal]
 		;wait 50
 		EVE:Execute[CmdCloseActiveWindow]
-		wait 50
+		wait 100
 
 	    variable index:agentmission amIndex
 		variable iterator amIterator
@@ -750,6 +770,7 @@ objectdef obj_Agents
 		{
 			UI:UpdateConsole["obj_Agents: ERROR: Mission details window was not found!"]
 			UI:UpdateConsole["obj_Agents: DEBUG: amIterator.Value.Name.Escape = ${amIterator.Value.Name.Escape}"]
+			EVE:Execute[CmdCloseAllWindows]
 			return
 		}
 		; The embedded quotes look odd here, but this is required to escape the comma that exists in the caption and in the resulting html.
@@ -831,10 +852,10 @@ objectdef obj_Agents
 
 		variable float volume = 0
 
-		right:Set[${details.Escape.Find["msup3"]}]
+		right:Set[${details.Escape.Find["m³"]}]
 		if ${right} > 0
 		{
-			;UI:UpdateConsole["obj_Agents: DEBUG: Found \"msup3\" at ${right}."]
+			;UI:UpdateConsole["obj_Agents: DEBUG: Found \"m³\" at ${right}."]
 			right:Dec
 			left:Set[${details.Escape.Mid[${Math.Calc[${right}-16]},16].Find[" ("]}]
 			if ${left} > 0
@@ -849,12 +870,12 @@ objectdef obj_Agents
 			}
 			else
 			{
-				UI:UpdateConsole["obj_Agents: ERROR: Did not find number before \"msup3\"!"]
+				UI:UpdateConsole["obj_Agents: ERROR: Did not find number before \"m³\"!"]
 			}
 		}
 		else
 		{
-			UI:UpdateConsole["obj_Agents: DEBUG: Did not find \"msup3\".  No cargo???"]
+			UI:UpdateConsole["obj_Agents: DEBUG: Did not find \"m³\".  No cargo???"]
 		}
 
 		Missions.MissionCache:SetVolume[${amIterator.Value.AgentID},${volume}]
@@ -870,7 +891,19 @@ objectdef obj_Agents
 			UI:UpdateConsole["obj_Agents: DEBUG: isLowSec = ${isLowSec}"]
 		}
 		Missions.MissionCache:SetLowSec[${amIterator.Value.AgentID},${isLowSec}]
-
+		
+		;Mining Missions, Gas Harvesting Determination
+		variable bool isGasHarvesting = FALSE
+		;left:Set[${details.Escape.Find["(Low Sec Warning!)"]}]
+        right:Set[${details.Escape.Find["(You need to fit a Gas Cloud Harvester to complete this mission.)"]}]
+		if ${left} > 0 || ${right} > 0
+		{
+            UI:UpdateConsole["obj_Agents: DEBUG: left = ${left}"]
+            UI:UpdateConsole["obj_Agents: DEBUG: right = ${right}"]
+			isGasHarvesting:Set[TRUE]
+			UI:UpdateConsole["obj_Agents: DEBUG: isGasHarvesting = ${isGasHarvesting}"]
+		}
+		Missions.MissionCache:SetGasHarvesting[${amIterator.Value.AgentID},${isGasHarvesting}]
 
   }
 
@@ -1002,11 +1035,14 @@ objectdef obj_Agents
 		variable string details
 		variable int left = 0
 		variable int right = 0
+		variable string warning
 
 		if !${EVEWindow[ByCaption, "Mission journal - ${This.ActiveAgent}"](exists)}
 		{
 			UI:UpdateConsole["obj_Agents: ERROR: Mission details window was not found!"]
+			EVE:Execute[CmdCloseAllWindows]
 			UI:UpdateConsole["obj_Agents: DEBUG: amIterator.Value.Name.Escape = ${amIterator.Value.Name.Escape}"]
+			
 			return
 		}
 		; The embedded quotes look odd here, but this is required to escape the comma that exists in the caption and in the resulting html.
@@ -1088,10 +1124,10 @@ objectdef obj_Agents
 
 		variable float volume = 0
 
-		right:Set[${details.Escape.Find["msup3"]}]
+		right:Set[${details.Escape.Find["m³"]}]
 		if ${right} > 0
 		{
-			;UI:UpdateConsole["obj_Agents: DEBUG: Found \"msup3\" at ${right}."]
+			;UI:UpdateConsole["obj_Agents: DEBUG: Found \"m³\" at ${right}."]
 			right:Dec
 			left:Set[${details.Escape.Mid[${Math.Calc[${right}-16]},16].Find[" ("]}]
 			if ${left} > 0
@@ -1106,12 +1142,12 @@ objectdef obj_Agents
 			}
 			else
 			{
-				UI:UpdateConsole["obj_Agents: ERROR: Did not find number before \"msup3\"!"]
+				UI:UpdateConsole["obj_Agents: ERROR: Did not find number before \"m³\"!"]
 			}
 		}
 		else
 		{
-			UI:UpdateConsole["obj_Agents: DEBUG: Did not find \"msup3\".  No cargo???"]
+			UI:UpdateConsole["obj_Agents: DEBUG: Did not find \"m³\".  No cargo???"]
 		}
 
 		Missions.MissionCache:SetVolume[${amIterator.Value.AgentID},${volume}]
@@ -1126,8 +1162,21 @@ objectdef obj_Agents
 			isLowSec:Set[TRUE]
 			UI:UpdateConsole["obj_Agents: DEBUG: isLowSec = ${isLowSec}"]
 		}
-
-		Missions.MissionCache:SetLowSec[${amIterator.Value.AgentID},${isLowSec}]
+   		Missions.MissionCache:SetLowSec[${amIterator.Value.AgentID},${isLowSec}]
+		
+		;Mining Missions, Gas Harvesting Determination
+		variable bool isGasHarvesting = FALSE
+		;left:Set[${details.Escape.Find["(Low Sec Warning!)"]}]
+        right:Set[${details.Escape.Find["(You need to fit a Gas Cloud Harvester to complete this mission.)"]}]
+		if ${left} > 0 || ${right} > 0
+		{
+            UI:UpdateConsole["obj_Agents: DEBUG: left = ${left}"]
+            UI:UpdateConsole["obj_Agents: DEBUG: right = ${right}"]
+			isGasHarvesting:Set[TRUE]
+			UI:UpdateConsole["obj_Agents: DEBUG: isGasHarvesting = ${isGasHarvesting}"]
+		}
+		Missions.MissionCache:SetGasHarvesting[${amIterator.Value.AgentID},${isGasHarvesting}]
+		
 
 		variable time lastDecline
 		lastDecline:Set[${Config.Agents.LastDecline[${This.AgentName}]}]
@@ -1139,6 +1188,7 @@ objectdef obj_Agents
 			if ${lastDecline.Timestamp} >= ${Time.Timestamp}
 			{
 				UI:UpdateConsole["obj_Agents: ERROR: You declined a mission less than four hours ago!  Switching agents...", LOG_CRITICAL]
+				skipList:Add[${amIterator.Value.AgentID}]
 				This:SetActiveAgent[${This.AgentList.NextAgent}]
 				return
 			}
@@ -1156,6 +1206,7 @@ objectdef obj_Agents
 			{
 				UI:UpdateConsole["obj_Agents: ERROR: You declined a mission less than four hours ago!  Switching agents...", LOG_CRITICAL]
 				call ChatIRC.Say "${Me.Name}: Can't decline blacklisted mission, changing agent."
+				skipList:Add[${amIterator.Value.AgentID}]
 				This:SetActiveAgent[${This.AgentList.NextAgent}]
 				return
 			}
@@ -1172,6 +1223,12 @@ objectdef obj_Agents
 		{
 			UI:UpdateConsole["RequestMission: Saying ${dsIndex[1].Text}", LOG_DEBUG]
 			dsIndex[1]:Say[${This.AgentID}]
+			wait 20
+			warning:Set[${EVEWindow[Active].Name}]
+			if ${warning.Equal[modal]}
+			{
+			EVEWindow[Active]:ClickButtonYes
+			}
 		}
 		elseif ${amIterator.Value.Type.Find[Trade](exists)} && ${Config.Missioneer.RunTradeMissions} == TRUE
 		{
@@ -1182,6 +1239,12 @@ objectdef obj_Agents
 		{
 			UI:UpdateConsole["RequestMission: Saying ${dsIndex[1].Text}", LOG_DEBUG]
 			dsIndex[1]:Say[${This.AgentID}]
+			wait 20
+			warning:Set[${EVEWindow[Active].Name}]
+			if ${warning.Equal[modal]}
+			{
+			EVEWindow[Active]:ClickButtonYes
+			}
 		}
 		elseif ${amIterator.Value.Type.Find[Encounter](exists)} && ${Config.Missioneer.RunKillMissions} == TRUE
 		{

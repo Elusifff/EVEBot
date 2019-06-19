@@ -374,7 +374,15 @@ objectdef obj_Configuration_Miner
 		This.MinerRef:AddSetting[Strip Mine, FALSE]
 		This.MinerRef:AddSetting[Cargo Threshold, 7000]
 
-
+		This.OreTypesRef:AddSetting[Lyavite, 1]
+		This.OreTypesRef:AddSetting[Augumene, 1]
+		This.OreTypesRef:AddSetting[Banidine, 1]
+		This.OreTypesRef:AddSetting[Mercium, 1]
+		This.OreTypesRef:AddSetting[Pithix, 1]
+		This.OreTypesRef:AddSetting[Arisite, 1]
+		This.OreTypesRef:AddSetting[Oeryl, 1]
+		This.OreTypesRef:AddSetting[Geodite, 1]
+		This.OreTypesRef:AddSetting[Polygypsum, 1]
 		This.OreTypesRef:AddSetting[Bitumens, 1]
 		This.OreTypesRef:AddSetting[Crnotite, 1]
 		This.OreTypesRef:AddSetting[Chromite, 1]

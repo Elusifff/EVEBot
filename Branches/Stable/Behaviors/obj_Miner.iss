@@ -1181,6 +1181,7 @@ objectdef obj_Miner
 			LockedTargets:Clear
 			Me:GetTargets[LockedTargets]
 			LockedTargets:GetIterator[Target]
+			
 
 			;	If we have at least one locked target, get to work on them
 			if ${Target:First(exists)}
@@ -1204,7 +1205,7 @@ objectdef obj_Miner
 					{
 						if ${Me.ActiveTarget.Distance} > 2000 && ${This.Approaching} == 0 
 						{
-							UI:UpdateConsole["Miner.Mine: Approaching ${Target.Value.Name}"]
+							UI:UpdateConsole["Miner.Mine: Approaching ${Me.ActiveTarget.Name}"]
 							Me.ActiveTarget:Approach[1000]
 							Ship:Activate_AfterBurner
 							This.Approaching:Set[${Me.ActiveTarget.ID}]
@@ -1225,11 +1226,17 @@ objectdef obj_Miner
 					if ${Ship.Drones.DronesInSpace} == 0 && ${Config.Miner.UseMiningDrones}
 					;&& !${Config.Miner.IceMining}
 					{
-						Ship.Drones:LaunchAll
+						Ship.Drones:LaunchMining
 						UI:UpdateConsole["Launch the God Damn Drones Please"]
 						return
+						wait 50
 					}
 					;	Mine the God Damn Rocks Please
+					if ${This.Defend.AttackDrones.Used} > 0 && ${This.Defend_Atomize_1.AttackingTeam.Used} == 0
+					{
+						UI:UpdateConsole["Miner.Defend: Recalling Drones"]
+						Ship.Drones:ReturnAllToDroneBay
+					}
 					if ${Ship.Drones.DronesInSpace} > 0 && ${Config.Miner.UseMiningDrones}
 					;&& !${Config.Miner.IceMining}
 					{
@@ -1242,6 +1249,11 @@ objectdef obj_Miner
 
 						do
 						{
+							if ${DroneIterator.Value.ToEntity.GroupID} != 101
+							{
+								Ship.Drones:ReturnAllToDroneBay
+								break
+							}
 							if ${DroneIterator.Value.ToEntity.GroupID} != GROUP_FIGHTERDRONE && \
 							(${DroneIterator.Value.ToEntity.ShieldPct} < 80 || \
 							${DroneIterator.Value.ToEntity.ArmorPct} < 0)
@@ -1807,7 +1819,7 @@ objectdef obj_Miner
 
 		variable iterator GetData
 		Attacking:Set[${This.Defend_Atomize_1[${Attacking}]}]
-
+		
 		if ${Attacking} != -1 && ${Entity[${Attacking}].IsLockedTarget} && ${Entity[${Attacking}](exists)}
 		{
 			Entity[${Attacking}]:MakeActiveTarget
@@ -1816,19 +1828,40 @@ objectdef obj_Miner
 			variable index:activedrone ActiveDroneList
 			variable iterator DroneIterator
 			variable index:int64 AttackDrones
+			variable index:int64 WrongDrones
 
 			Me:GetActiveDrones[ActiveDroneList]
 			ActiveDroneList:GetIterator[DroneIterator]
 			if ${DroneIterator:First(exists)}
 				do
 				{
-					if ${DroneIterator.Value.State} == 0
+					; Hard coded TypeIDs for all mining drones you are likely to use while mining.
+					;if ${DroneIterator.Value.TypeID} == 10246
+					if ${DroneIterator.Value.ToEntity.GroupID} == 101
+					{
+						WrongDrones:Insert[${DroneIterator.Value.ID}]
+						UI:UpdateConsole["Wrong Drones"]
+					}
+					EVE:DronesReturnToDroneBay[WrongDrones]
+					{
+						wait 20
+					}
+					while ${WrongDrones.Used} > 0
+					Ship.Drones:LaunchCombat
+					wait 25
+					; Hard coded TypeIDs for all combat drones you are likely to use while mining.
+					;if ${DroneIterator.Value.TypeID} == 2203
+					if ${DroneIterator.Value.ToEntity.GroupID} == 100
+					{
 						AttackDrones:Insert[${DroneIterator.Value.ID}]
+					}
+					
 				}
 				while ${DroneIterator:Next(exists)}
 
 			if ${AttackDrones.Used} > 0
 			{
+				Entity[${Attacking}]:MakeActiveTarget
 				UI:UpdateConsole["Miner.Defend: Sending ${AttackDrones.Used} Drones to attack ${Entity[${Attacking}].Name}"]
 				EVE:DronesEngageMyTarget[AttackDrones]
 			}
@@ -1863,7 +1896,7 @@ objectdef obj_Miner
 				while ${GetData:Next(exists)}
 		}
 
-		if ${Ship.Drones.DronesInSpace[FALSE]} > 0 && ${AttackingTeam.Used} == 0
+		if ${This.Defend.AttackDrones.Used} > 0 && ${AttackingTeam.Used} == 0
 		{
 			UI:UpdateConsole["Miner.Defend: Recalling Drones"]
 			Ship.Drones:ReturnAllToDroneBay
@@ -1872,7 +1905,7 @@ objectdef obj_Miner
 		if ${Ship.Drones.DronesInSpace[FALSE]} == 0  && ${AttackingTeam.Used} > 0
 		{
 			UI:UpdateConsole["Miner.Defend: Deploying drones"]
-			Ship.Drones:LaunchAll
+			Ship.Drones:LaunchCombat
 		}
 
 		Attacking:Set[-1]

@@ -17,7 +17,13 @@ objectdef obj_MissionCache
 
 	variable index:entity entityIndex
 	variable iterator     entityIterator
+		
+	variable index:entity BestAsteroidList
+	variable index:entity AsteroidList
+	variable iterator OreTypeIterator
+	
 
+	
 	method Initialize()
 	{
 		LavishSettings[MissionCache]:Clear
@@ -93,7 +99,21 @@ objectdef obj_MissionCache
 
 		This.MissionRef[${agentID}]:AddSetting[Volume,${volume}]
 	}
+	
+	member:bool GasHarvesting(int agentID)
+	{
+		return ${This.MissionRef[${agentID}].FindSetting[GasHarvesting,FALSE]}
+	}
 
+	method SetGasHarvesting(int agentID, bool isGasHarvesting)
+	{
+		if !${This.MissionsRef.FindSet[${agentID}](exists)}
+		{
+			This.MissionsRef:AddSet[${agentID}]
+		}
+
+		This.MissionRef[${agentID}]:AddSetting[GasHarvesting,${isGasHarvesting}]
+	}
 	member:bool LowSec(int agentID)
 	{
 		return ${This.MissionRef[${agentID}].FindSetting[LowSec,FALSE]}
@@ -342,7 +362,7 @@ objectdef obj_Missions
 		variable int        TypeID
 		variable int        ItemQuantity
 
-		Agents:SetActiveAgent[${Agent[id,${agentID}]}]
+	    Agents:SetActiveAgent[${Agent[id, ${agentID}].Name}]
 
 		itemName:Set[${EVEDB_Items.Name[${This.MissionCache.TypeID[${agentID}]}]}]
 		QuantityRequired:Set[${Math.Calc[${This.MissionCache.Volume[${agentID}]}/${EVEDB_Items.Volume[${This.MissionCache.TypeID[${agentID}]}]}]}]}]
@@ -444,8 +464,200 @@ objectdef obj_Missions
 
 	function RunMiningMission(int agentID)
 	{
-		UI:UpdateConsole["obj_Missions: ERROR!  Mining missions are not supported!"]
-		Script:Pause
+		
+	;	This is used to keep track of what we are approaching and when we started
+		variable int64 Approaching = 0
+		variable int TimeStartedApproaching = 0
+		variable bool ApproachingOrca=FALSE
+	
+	;	Variables used to target and track asteroids
+		variable index:entity LockedTargets
+		variable iterator Target
+		variable int AsteroidsLocked=0
+		variable iterator AsteroidIterator
+		variable int AsteroidsNeeded=1
+	
+		variable int        QuantityRequired
+		variable string     itemName
+		variable bool       haveCargo = FALSE
+		variable index:item HangarIndex
+		variable iterator   HangarIterator
+		variable index:item OreIndex
+		variable iterator	OreIterator
+		variable int        TypeID
+		variable int        ItemQuantityA
+		variable float		itemVolume
+		variable int		ItemQuantityB
+		
+		variable index:item hsIndex
+		variable iterator hsIterator
+		variable string shipName
+	    
+		
+		Agents:SetActiveAgent[${Agent[id, ${agentID}].Name}]		
+		;if ${This.MissionCache.Volume[${agentID}]} == 0
+		;{
+			call Agents.MissionDetails ${agentID}
+		;}
+
+		itemName:Set[${EVEDB_Items.Name[${This.MissionCache.TypeID[${agentID}]}]}]
+		itemVolume:Set[${EVEDB_Items.Volume[${TypeID}]}]
+		
+		;QuantityRequired:Set[${Math.Calc[${This.MissionCache.Volume[${agentID}]}/${EVEDB_Items.Volume[${This.MissionCache.TypeID[${agentID}]}]}]}]}]
+		QuantityRequired:Set[${Math.Calc[${This.MissionCache.Volume[${agentID}]}/${itemVolume}]}
+		
+		call Ship.OpenCargo
+		if ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipOreHold](exists)}
+			{
+				EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipOreHold]:MakeActive
+				EVEWindow["Inventory"]:StackAll
+			}
+		wait 10
+		if ${Station.Docked}
+		{
+			call Cargo.TransferOreToStationHangar
+			wait 50
+			OreIndex:Clear
+			MyShip:GetOreHoldCargo[OreIndex]
+			wait 10
+			OreIndex:GetIterator[OreIterator]
+		}
+		if ${OreIterator:First(exists)} && ${Station.Docked}
+		{
+			do
+			{
+				TypeID:Set[${OreIterator.Value.TypeID}]
+				ItemQuantityA:Set[${OreIterator.Value.Quantity}]
+				UI:UpdateConsole["DEBUG: Miner: Ship's Cargo: A ${ItemQuantityA} units of ${OreIterator.Value.Name}(${TypeID})."]
+
+				if (${TypeID} == ${This.MissionCache.TypeID[${agentID}]}) && \
+				   (${ItemQuantityA} >= ${QuantityRequired})
+				{
+					UI:UpdateConsole["DEBUG: Miner: Found required items in ship's cargohold."]
+					haveCargo:Set[TRUE]
+				}
+			}
+			while ${OreIterator:Next(exists)}
+		}
+		;;; Check the hangar of the current station
+		if ${haveCargo} == FALSE && ${Station.Docked}
+		{
+			HangarIndex:Clear
+			Me:GetHangarItems[HangarIndex]
+			HangarIndex:GetIterator[HangarIterator]
+
+			if ${HangarIterator:First(exists)}
+			{
+				do
+				{
+					TypeID:Set[${HangarIterator.Value.TypeID}]
+					ItemQuantityB:Set[${HangarIterator.Value.Quantity}]
+					UI:UpdateConsole["DEBUG: Miner: Station Hangar: B ${ItemQuantityB} units of ${HangarIterator.Value.Name}(${TypeID})."]
+
+					if (${TypeID} == ${This.MissionCache.TypeID[${agentID}]}) && \
+					   (${ItemQuantityB} >= ${QuantityRequired})
+					{
+						UI:UpdateConsole["DEBUG: Miner: Found required items in station hangar."]
+						if ${Agents.InAgentStation} == FALSE
+						{
+							call Cargo.TransferHangarItemToShip ${This.MissionCache.TypeID[${agentID}]}
+						}
+						haveCargo:Set[TRUE]
+					}
+				}
+				while ${HangarIterator:Next(exists)}
+			}
+		}
+		if ${haveCargo} == TRUE
+		{
+			call Agents.TurnInMission
+			wait 50
+		}
+		;Determine ShipType Needed
+		;call Ship.ActivateShip "${Config.Missioneer.SmallHauler}"
+		;if ${This.MissionCache.GasHarvesting[${agentID}]} == TRUE
+		;{
+		;	UI:UpdateConsole["GAS SITE its alright"]
+			;Script:Pause
+		;	call Ship.ActivateShip "Gas Venture"
+		;}	
+		; EVEBOT CAN'T CHANGE SHIPS AT THE MOMENT, CRAP
+		;else
+		
+		;{
+			call Ship.ActivateShip "${Config.Missioneer.SmallHauler}"
+			call This.WarpToEncounter ${agentID}
+			UI:UpdateConsole["Move To Mining Site"]
+			while ${Ship.InWarp}
+			{
+				wait 75
+			}
+		
+			Ship.Drones:LaunchAll
+			do
+			{
+				wait 15
+				call Asteroids.UpdateList
+				wait 20
+				if ${AsteroidIterator.Value.Distance} >= 14000
+				{
+					call Ship.Approach ${AsteroidIterator.Value.ID} 10000
+				}
+				if (${Math.Calc[${Me.TargetCount} + ${Me.TargetingCount}]} < 1
+				{
+						call Asteroids.MissionTargetNext
+				}
+				wait 20
+				wait 50 ${Me.TargetingCount} == 0
+				LockedTargets:Clear
+				Me:GetTargets[LockedTargets]
+				LockedTargets:GetIterator[Target]
+				do
+				{
+					if ${Ship.Drones.DronesInSpace} == 0
+					{
+						Ship.Drones:LaunchAll
+					}
+					Asteroids.AsteroidList:GetIterator[AsteroidIterator]
+					if ${Entity[${Target.Value.ID}].Distance} >= 15000
+					{
+					call Ship.Approach ${AsteroidIterator.Value.ID} 10000
+					}
+					if ${Miner.MinerFull}
+					{
+						EVE:Execute[CmdDronesReturnToBay]
+						wait 50
+						call Agents.MoveTo ${agentID}
+						wait 50
+						call Cargo.TransferOreToStationHangar
+						wait 50
+						call This.WarpToEncounter ${agentID}
+						break
+					}
+					call Asteroids.UpdateList
+					if ${Entity[${Target.Value.ID}].Distance} <= 15000
+					{
+						EVE:Execute[CmdStopShip]
+						call Ship.ActivateFreeMiningLaser ${Me.ActiveTarget}
+						wait 50
+						call Ship.ActivateFreeMiningLaser ${Me.ActiveTarget}
+					}
+					else
+					{
+						if ${Entity[${Target.Value.ID}].Distance} >=${Ship.OptimalMiningRange[1]}
+						call Ship.Approach ${Me.ActiveTarget} 14000
+					}
+
+				}
+				while ${Target:Next(exists)}
+			}
+			while ${Asteroids.FieldEmpty} == FALSE
+			EVE:Execute[CmdDronesReturnToBay]
+			wait 50
+			call Agents.MoveTo ${agentID}
+			wait 50
+			call Agents.TurnInMission
+		;}
 	}
 
 	function RunCombatMission(int agentID)
@@ -941,4 +1153,4 @@ objectdef obj_Missions
 
 	  return FALSE
    }
-}
+ }

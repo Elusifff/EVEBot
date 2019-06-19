@@ -35,9 +35,9 @@ objectdef obj_Market
 		This.sellOrders:Clear
 		This.buyOrders:Clear
 
-		EVE:UpdateMarketOrders_A[${typeID}]
-		wait 40
-		EVE:UpdateMarketOrders_B[${typeID}]
+		EVE:FetchMarketOrders[${x}] 
+
+		;EVE:UpdateMarketOrders_B[${typeID}]
 		wait 10
 		EVE:GetMarketOrders[This.sellOrders,${typeID}, "Sell"]
 		wait 10

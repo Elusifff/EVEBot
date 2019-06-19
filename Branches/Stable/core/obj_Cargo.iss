@@ -1027,7 +1027,7 @@ objectdef obj_Cargo
 						}
 						else
 						{
-							; Move only what will fit, minus 1 to account for CCP rounding errors.
+							 Move only what will fit, minus 1 to account for CCP rounding errors.
 							QuantityToMove:Set[${Math.Calc[${Ship.CargoFreeSpace} / ${CargoIterator.Value.Volume} - 1]}]
 						}
 					}
@@ -1040,7 +1040,7 @@ objectdef obj_Cargo
 					UI:UpdateConsole["TransferListToShip: Loading Cargo: DEBUG: TypeID = ${CargoIterator.Value.TypeID}, GroupID = ${CargoIterator.Value.GroupID}"]
 					if ${QuantityToMove} > 0
 					{
-						CargoIterator.Value:MoveTo[MyShip, CargoHold, ${QuantityToMove}]
+						CargoIterator.Value:MoveTo[${MyShip.ID}, CargoHold, ${QuantityToMove}]
 						wait 15
 					}
 
@@ -1455,7 +1455,7 @@ objectdef obj_Cargo
 				call This.TransferListToShip
 
 				This.CargoToTransfer:Clear[]
-				EVEWindow[ByItemID, ${MyShip.ID}]:StackAll
+				EVEinvWindow[ByItemID, ${MyShip.ID}]:StackAll
 				Ship:UpdateBaselineUsedCargo[]
 				call This.CloseHolds
 

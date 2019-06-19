@@ -248,7 +248,8 @@ objectdef obj_Ship
 			return
 		}
 
-		return ${Math.Calc[${MyShip.CargoCapacity}*0.02]}
+		;return ${Math.Calc[${MyShip.CargoCapacity}*0.02]}
+		return ${Math.Calc[${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipCargo].Capacity}*0.02]}
 	}
 
 	member:float CargoFreeSpace()
@@ -258,11 +259,12 @@ objectdef obj_Ship
 			return 0
 		}
 
-		if ${MyShip.UsedCargoCapacity} < 0
+		if ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipCargo].UsedCapacity} < 0
 		{
-			return ${MyShip.CargoCapacity}
+			return ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipCargo].Capacity}
 		}
-		return ${Math.Calc[${MyShip.CargoCapacity}-${MyShip.UsedCargoCapacity}]}
+		;return ${Math.Calc[${MyShip.CargoCapacity}-${MyShip.UsedCargoCapacity}]}
+		return ${Math.Calc[${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipCargo].Capacity}-${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipCargo].UsedCapacity}]}
 	}
 
 	member:float CargoUsedSpace()
@@ -272,11 +274,11 @@ objectdef obj_Ship
 			return 0
 		}
 
-		if ${MyShip.UsedCargoCapacity} < 0
+		if ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipCargo].UsedCapacity} < 0
 		{
-			return ${MyShip.CargoCapacity}
+			return ${Math.Calc[${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipCargo].Capacity}
 		}
-		return ${MyShip.UsedCargoCapacity}
+		return ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipCargo].UsedCapacity}
 	}
 
 	method StackCargoHold()
@@ -1485,7 +1487,7 @@ objectdef obj_Ship
 
 				UI:UpdateConsole["Activating: ${Slot}: ${ModuleIter.Value.ToItem.Name}"]
 				ModuleIter.Value:Activate[${id}]
-				TimedCommand ${Math.Rand[165]:Inc[115]} "Script[EVEBot].VariableScope.Ship:CycleMiningLaser[OFF, ${Slot}]"
+				TimedCommand ${Math.Rand[200]:Inc[600]} "Script[EVEBot].VariableScope.Ship:CycleMiningLaser[OFF, ${Slot}]"
 				return
 			}
 		}
@@ -3153,7 +3155,8 @@ objectdef obj_Ship
 
 		if ${Station.Docked}
 		{
-			Me:GetHangarShips[hsIndex]
+			
+			Station:GetHangarShips[hsIndex]
 			hsIndex:GetIterator[hsIterator]
 
 			shipName:Set[${MyShip}]
