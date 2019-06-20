@@ -741,7 +741,7 @@ objectdef obj_Asteroids
 					!${AsteroidIterator.Value.IsLockedTarget} && \
 					!${AsteroidIterator.Value.BeingTargeted} && \
 					${AsteroidIterator.Value.Distance} < ${MyShip.MaxTargetRange} && \
-					( !${Me.ActiveTarget(exists)} || ${AsteroidIterator.Value.DistanceTo[${Me.ActiveTarget.ID}]} <= 25000 )
+					( !${Me.ActiveTarget(exists)} || ${AsteroidIterator.Value.DistanceTo[${Me.ActiveTarget.ID}]} <= 55000 )
 				{
 					break
 				}
@@ -760,9 +760,9 @@ objectdef obj_Asteroids
 			}
 				if !${IgnoreTargeting}
 				{
-					if ${AsteroidIterator.Value.Distance} >= 14000
+					if ${AsteroidIterator.Value.Distance} >= 50000
 					{
-					call Ship.Approach ${AsteroidIterator.Value.ID} 10000
+					call Ship.Approach ${AsteroidIterator.Value.ID} 25000
 					}
 					UI:UpdateConsole["Locking Asteroid ${AsteroidIterator.Value.Name}: ${EVEBot.MetersToKM_Str[${AsteroidIterator.Value.Distance}]}"]
 					AsteroidIterator.Value:LockTarget
@@ -789,7 +789,7 @@ objectdef obj_Asteroids
 							UI:UpdateConsole["obj_Asteroids: TargetNext: No Asteroids in range & All lasers idle: Approaching nearest"]
 							if ${MyShip.MaxTargetRange} < ${Ship.OptimalMiningRange} || ${Config.Miner.UseMiningDrones} && ${Ship.TotalMiningLasers} == 0
 							{
-								call Ship.Approach ${AsteroidIterator.Value.ID} 1000
+								call Ship.Approach ${AsteroidIterator.Value.ID} 20000
 							}
 							else
 							{

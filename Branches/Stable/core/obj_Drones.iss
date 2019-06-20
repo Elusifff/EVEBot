@@ -233,17 +233,38 @@ objectdef obj_Drones
 
 	method ActivateMiningDrones()
 	{
-		Me:GetActiveDroneIDs[This.ActiveDroneIDList]
+		variable index:activedrone ActiveDroneList
+		variable iterator DroneIterator
+		variable index:int64 LazyDrone
+		Me:GetActiveDrones[ActiveDroneList]
+		ActiveDroneList:GetIterator[DroneIterator]
+		
+		if ${DroneIterator:First(exists)}
+			do
+			{
+				if ${DroneIterator.Value.State} == 0
+				{
+					LazyDrone:Insert[${DroneIterator.Value.ID}]
+				}
+			}
+			while ${DroneIterator:Next(exists)}
+			
+		if ${LazyDrone.Used} > 0
+		{
+			EVE:DronesMineRepeatedly[LazyDrone]
+		}
+		
 		if ${Ship.Drones.DronesInSpace} == 0
 		{
 			UI:UpdateConsole["Broken?"]
 			return
 		}
+		
 
 		if (${This.DronesInSpace} > 0) && ${MiningDroneTarget} != ${Me.ActiveTarget}
 		{
 			UI:UpdateConsole["PISSSSSSSSSSSSSSS"]
-			EVE:DronesMineRepeatedly[This.ActiveDroneIDList]
+			EVE:DronesMineRepeatedly[ActiveDroneList]
 			MiningDroneTarget:Set[${Me.ActiveTarget}]
 		}
 	}

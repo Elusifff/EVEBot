@@ -1114,7 +1114,7 @@ objectdef obj_Miner
 			;	Calculate how many asteroids we need
 			if ${Config.Miner.UseMiningDrones} && ${Ship.TotalMiningLasers} == 0
 				{
-					variable int AsteroidsNeeded=2
+					variable int AsteroidsNeeded=1
 				}
 			;	I don't know what I was doing here
 			if ${Config.Miner.UseMiningDrones} && ${Ship.TotalMiningLasers} == 0
@@ -1203,10 +1203,10 @@ objectdef obj_Miner
 					;	Find out if we need to approach this target - also don't approach if we're approaching another target
 					if ${Ship.TotalMiningLasers} == 0 && ${Config.Miner.UseMiningDrones}
 					{
-						if ${Me.ActiveTarget.Distance} > 2000 && ${This.Approaching} == 0 
+						if ${Me.ActiveTarget.Distance} > 10000 && ${This.Approaching} == 0 
 						{
 							UI:UpdateConsole["Miner.Mine: Approaching ${Me.ActiveTarget.Name}"]
-							Me.ActiveTarget:Approach[1000]
+							Me.ActiveTarget:Approach[5000]
 							Ship:Activate_AfterBurner
 							This.Approaching:Set[${Me.ActiveTarget.ID}]
 							This.TimeStartedApproaching:Set[${Time.Timestamp}]
@@ -1228,52 +1228,71 @@ objectdef obj_Miner
 					{
 						Ship.Drones:LaunchMining
 						UI:UpdateConsole["Launch the God Damn Drones Please"]
-						return
 						wait 50
 					}
 					;	Mine the God Damn Rocks Please
-					if ${This.Defend.AttackDrones.Used} > 0 && ${This.Defend_Atomize_1.AttackingTeam.Used} == 0
-					{
-						UI:UpdateConsole["Miner.Defend: Recalling Drones"]
-						Ship.Drones:ReturnAllToDroneBay
-					}
-					if ${Ship.Drones.DronesInSpace} > 0 && ${Config.Miner.UseMiningDrones}
+					;if ${Defend.AttackDrones.Used} == 0 && ${Me.TargetedByCount} > 0
+					;{
+						;UI:UpdateConsole["Miner.Defend: Recalling Drones"]
+						;Ship.Drones:ReturnAllToDroneBay
+					;}
+					if ${Ship.Drones.DronesInSpace} > 0 && ${Config.Miner.UseMiningDrones} && ${Me.TargetedByCount} == 0
 					;&& !${Config.Miner.IceMining}
 					{
-						variable iterator DroneIterator
-						variable index:activedrone ActiveDroneList
-						Me:GetActiveDrones[ActiveDroneList]
-						ActiveDroneList:GetIterator[DroneIterator]
+						variable iterator DroneIteratorC
+						variable index:activedrone ActiveDroneListC
+						Me:GetActiveDrones[ActiveDroneListC]
+						ActiveDroneListC:GetIterator[DroneIteratorC]
 						variable index:int64 returnIndex
 						variable index:int64 engageIndex
-
+						
+						if ${DroneIteratorC:First(exists)}
 						do
 						{
-							if ${DroneIterator.Value.ToEntity.GroupID} != 101
+							if ${DroneIteratorC.Value.ToEntity.GroupID} != 101
 							{
+								UI:UpdateConsole["Mine Function Recall"]
 								Ship.Drones:ReturnAllToDroneBay
-								break
 							}
-							if ${DroneIterator.Value.ToEntity.GroupID} != GROUP_FIGHTERDRONE && \
-							(${DroneIterator.Value.ToEntity.ShieldPct} < 80 || \
-							${DroneIterator.Value.ToEntity.ArmorPct} < 0)
+						}
+						while ${DroneIteratorC:Next(exists)}
+						
+						
+						if ${Ship.Drones.DronesInSpace[FALSE]} == 0
+						{
+							Ship.Drones:LaunchMining
+							wait 50
+						}
+						variable iterator DroneIteratorD
+						variable index:activedrone ActiveDroneListD					
+						Me:GetActiveDrones[ActiveDroneListD]
+						ActiveDroneListD:GetIterator[DroneIteratorD]
+						if ${DroneIteratorD:First(exists)}
+						do
+						{
+						
+							if ${DroneIteratorD.Value.ToEntity.GroupID} != GROUP_FIGHTERDRONE && \
+							(${DroneIteratorD.Value.ToEntity.ShieldPct} < 80 || \
+							${DroneIteratorD.Value.ToEntity.ArmorPct} < 0)
 							{
-								UI:UpdateConsole["Recalling Damaged Drone ${DroneIterator.Value.ID} Shield %: ${DroneIterator.Value.ToEntity.ShieldPct} Armor %: ${DroneIterator.Value.ToEntity.ArmorPct}"]
-								returnIndex:Insert[${DroneIterator.Value.ID}]
+								UI:UpdateConsole["Recalling Damaged Drone ${DroneIteratorD.Value.ID} Shield %: ${DroneIterator.Value.ToEntity.ShieldPct} Armor %: ${DroneIterator.Value.ToEntity.ArmorPct}"]
+								returnIndex:Insert[${DroneIteratorD.Value.ID}]
 
 							}
 							else
 							{
-								;UI:UpdateConsole["Debug: Engage Target ${DroneIterator.Value.ID}"]
-								engageIndex:Insert[${DroneIterator.Value.ID}]
+								wait 10
+								UI:UpdateConsole["Debug: Engage Target ${DroneIteratorD.Value.ID}"]
+								engageIndex:Insert[${DroneIteratorD.Value.ID}]
 							}
 						}
-						while ${DroneIterator:Next(exists)}
+						while ${DroneIteratorD:Next(exists)}
+						
 						if ${returnIndex.Used} > 0
 						{
 							EVE:DronesReturnToDroneBay[returnIndex]
 						}
-						if ${engageIndex.Used} > 0
+						if ${Ship.Drones.DronesInSpace[FALSE]} == 5
 						{
 							Ship.Drones:ActivateMiningDrones
 						}
@@ -1308,7 +1327,7 @@ objectdef obj_Miner
 		if ${Ship.TotalMiningLasers} == 0 && ${Config.Miner.UseMiningDrones}
 		{
 			if (${Entity[${This.Approaching}](exists)} && \
-				${Entity[${This.Approaching}].Distance} <= 1500 && \
+				${Entity[${This.Approaching}].Distance} <= 5000 && \
 				${This.Approaching} != 0 && \
 				!${This.ApproachingOrca}) || \
 				(!${Entity[${This.Approaching}](exists)} && ${This.Approaching} != 0)
@@ -1336,7 +1355,7 @@ objectdef obj_Miner
 		}
 		
 		;	Afterburner, please turn off.
-		if ${Me.ActiveTarget.Distance} < 2000
+		if ${Me.ActiveTarget.Distance} < 5000
 			{
 				Ship:Deactivate_AfterBurner
 			}
@@ -1431,8 +1450,9 @@ objectdef obj_Miner
 		Asteroids.AsteroidList:GetIterator[AsteroidIterator]
 		if !${AsteroidIterator:First(exists)}
 		{
-			while ${Ship.Drones.DronesInSpace[FALSE]} != 0
+			while ${Ship.Drones.DronesInSpace[FALSE]} != 0 && ${Me.TargetedByCount} > 0
 			{
+				UI:UpdateConsole["Lead in recall"]
 				Ship.Drones:ReturnAllToDroneBay
 				wait 20
 			}
@@ -1842,28 +1862,51 @@ objectdef obj_Miner
 						WrongDrones:Insert[${DroneIterator.Value.ID}]
 						UI:UpdateConsole["Wrong Drones"]
 					}
-					EVE:DronesReturnToDroneBay[WrongDrones]
+				}
+				while ${DroneIterator:Next(exists)}
+				
+				if ${WrongDrones.Used} > 0
+					{
+					Ship.Drones:ReturnAllToDroneBay
+					UI:UpdateConsole["Wrong Drones Recall"]
+					}
+					do
 					{
 						wait 20
 					}
-					while ${WrongDrones.Used} > 0
+					while ${WrongDrones.Used} > 0 && ${Ship.Drones.DronesInSpace[FALSE]} > 0
+				
+			
+			if ${Ship.Drones.DronesInSpace[FALSE]} == 0
+				{
 					Ship.Drones:LaunchCombat
-					wait 25
-					; Hard coded TypeIDs for all combat drones you are likely to use while mining.
-					;if ${DroneIterator.Value.TypeID} == 2203
+					wait 50
+				}
+				
+			Me:GetActiveDrones[ActiveDroneList]
+			ActiveDroneList:GetIterator[DroneIterator]				
+			if ${DroneIterator:First(exists)}
+				do
+				{
 					if ${DroneIterator.Value.ToEntity.GroupID} == 100
 					{
 						AttackDrones:Insert[${DroneIterator.Value.ID}]
 					}
-					
 				}
 				while ${DroneIterator:Next(exists)}
+					
 
 			if ${AttackDrones.Used} > 0
 			{
 				Entity[${Attacking}]:MakeActiveTarget
 				UI:UpdateConsole["Miner.Defend: Sending ${AttackDrones.Used} Drones to attack ${Entity[${Attacking}].Name}"]
 				EVE:DronesEngageMyTarget[AttackDrones]
+			}
+			
+			if !${Entity[${Attacking}](exists)}
+			{
+			UI:UpdateConsole["No Attackers, Recalling Drones"]
+			Ship.Drones:ReturnAllToDroneBay
 			}
 		}
 
@@ -1883,7 +1926,7 @@ objectdef obj_Miner
 						if ${Entity[${GetData.Value}].Distance} < ${Ship.OptimalTargetingRange} && \
 							${Entity[${GetData.Value}].Distance} < ${Me.DroneControlDistance} && \
 							!${Entity[${GetData.Value}].IsLockedTarget} && \
-							!${${GetData.Value}].BeingTargeted}
+							!${${GetData.Value}].BeingTargeted} && (${Math.Calc[${Me.TargetCount} + ${Me.TargetingCount}]} < ${Ship.SafeMaxLockedTargets})
 						{
 							Entity[${GetData.Value}]:LockTarget
 						}
@@ -1892,11 +1935,15 @@ objectdef obj_Miner
 					{
 						AttackingTeam:Remove[${GetData.Value}]
 					}
+				if (${Math.Calc[${Me.TargetCount} + ${Me.TargetingCount}]} >= ${Ship.SafeMaxLockedTargets})
+				{	
+					break
+				}
 				}
 				while ${GetData:Next(exists)}
 		}
 
-		if ${This.Defend.AttackDrones.Used} > 0 && ${AttackingTeam.Used} == 0
+		if ${This.Defend.AttackDrones.Used} > 0 && !${Entity[${Attacking}](exists)}
 		{
 			UI:UpdateConsole["Miner.Defend: Recalling Drones"]
 			Ship.Drones:ReturnAllToDroneBay
