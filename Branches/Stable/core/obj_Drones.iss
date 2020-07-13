@@ -71,6 +71,95 @@ objectdef obj_Drones
 		}
 	}
 
+	method LaunchMining()
+	{
+		variable index:item DroneListA
+		variable index:int64 ListToLaunchA	
+		variable iterator DroneIteratorA
+		MyShip:GetDrones[DroneListA]		
+		DroneListA:GetIterator[DroneIteratorA]
+
+		UI:UpdateConsole["Step 1"]
+		if ${DroneIteratorA:First(exists)}
+		{	
+			do
+				{
+					UI:UpdateConsole["Step 2"]
+					if ${DroneIteratorA.Value.GroupID} == 101
+					{
+					ListToLaunchA:Insert[${DroneIteratorA.Value.ID}]
+					}
+
+				}
+				while ${DroneIteratorA:Next(exists)}
+			if ${ListToLaunchA.Used}
+			{
+				UI:UpdateConsole["Launching ${ListToLaunchA.Used} Mining Drones."]
+				EVE:LaunchDrones[ListToLaunchA]
+				This.WaitingForDrones:Set[${ListToLaunchA.Used}]
+			}
+		}
+	}	
+	
+	method LaunchCombat()
+	{
+		variable index:item DroneListB
+		variable index:int64 ListToLaunchB	
+		variable iterator DroneIteratorB
+		MyShip:GetDrones[DroneListB]		
+		DroneListB:GetIterator[DroneIteratorB]
+
+		UI:UpdateConsole["Step 1"]
+		if ${DroneIteratorB:First(exists)}
+		{	
+			do
+				{
+					UI:UpdateConsole["Step 2"]
+					if ${DroneIteratorB.Value.GroupID} == 100
+					{
+					ListToLaunchB:Insert[${DroneIteratorB.Value.ID}]
+					}
+
+				}
+				while ${DroneIteratorB:Next(exists)}
+			if ${ListToLaunchB.Used}
+			{
+				UI:UpdateConsole["Launching ${ListToLaunchB.Used} Combat Drones."]
+				EVE:LaunchDrones[ListToLaunchB]
+				This.WaitingForDrones:Set[${ListToLaunchB.Used}]
+			}
+		}
+	}	
+	
+	method LaunchIceHarvester()
+	{
+		variable index:item DroneListC
+		variable index:int64 ListToLaunchC	
+		variable iterator DroneIteratorC
+		MyShip:GetDrones[DroneListC]		
+		DroneListC:GetIterator[DroneIteratorC]
+
+		UI:UpdateConsole["Step 1"]
+		if ${DroneIteratorC:First(exists)}
+		{	
+			do
+				{
+					UI:UpdateConsole["Step 2"]
+					if ${DroneIteratorC.Value.GroupID} == 464
+					{
+					ListToLaunchC:Insert[${DroneIteratorC.Value.ID}]
+					}
+
+				}
+				while ${DroneIteratorC:Next(exists)}
+			if ${ListToLaunchC.Used}
+			{
+				UI:UpdateConsole["Launching ${ListToLaunchC.Used} Ice Harvester Drones."]
+				EVE:LaunchDrones[ListToLaunchC]
+				This.WaitingForDrones:Set[${ListToLaunchC.Used}]
+			}
+		}
+	}
 	method LaunchAll()
 	{
 		if ${This.DronesInBay} > 0
@@ -164,20 +253,49 @@ objectdef obj_Drones
 			This.ActiveDroneIDList:RemoveByQuery[${LavishScript.CreateQuery[GroupID = GROUP_FIGHTERDRONE]}]
 			EVE:DronesReturnToDroneBay[This.ActiveDroneIDList]
 			EVE:Execute[CmdDronesReturnToBay]
+			This.ActiveDroneIDList:Clear
 
 		}
+		wait 500
 	}
 
 	method ActivateMiningDrones()
 	{
-		if !${This.DronesReady}
+		variable index:activedrone ActiveDroneListX
+		variable iterator DroneIteratorX
+		variable index:int64 LazyDrone
+		Me:GetActiveDrones[ActiveDroneListX]
+		ActiveDroneListX:GetIterator[DroneIteratorX]
+		
+		;UI:UpdateConsole["ASSSSSSSS"]
+		if ${DroneIteratorX:First(exists)}
+			do
+			{
+				if ${DroneIteratorX.Value.State} == 0
+				{
+					LazyDrone:Insert[${DroneIteratorX.Value.ID}]
+					EVE:DronesMineRepeatedly[ActiveDroneListX]
+				}
+			}
+			while ${DroneIteratorX:Next(exists)}
+			
+		if ${LazyDrone.Used} > 0
 		{
+			EVE:DronesMineRepeatedly[LazyDrone]
+			LazyDrone:Clear
+		}
+		
+		if ${Ship.Drones.DronesInSpace} == 0
+		{
+			UI:UpdateConsole["Broken?"]
 			return
 		}
+		
 
-		if (${This.DronesInSpace} > 0)
+		if (${This.DronesInSpace} > 0) && ${MiningDroneTarget} != ${Me.ActiveTarget} 
 		{
-			EVE:DronesMineRepeatedly[This.ActiveDroneIDList]
+			;UI:UpdateConsole["PISSSSSSSSSSSSSSS"]
+			EVE:DronesMineRepeatedly[ActiveDroneListX]
 			MiningDroneTarget:Set[${Me.ActiveTarget}]
 		}
 	}
@@ -220,7 +338,10 @@ objectdef obj_Drones
 				else
 				{
 					;UI:UpdateConsole["Debug: Engage Target ${DroneIterator.Value.ID}"]
-					engageIndex:Insert[${DroneIterator.Value.ID}]
+					if ${DroneIterator.Value.State} == 0
+					{
+						engageIndex:Insert[${DroneIterator.Value.ID}]
+					}
 				}
 			}
 			while ${DroneIterator:Next(exists)}

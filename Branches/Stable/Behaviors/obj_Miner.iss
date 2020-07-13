@@ -284,7 +284,7 @@ objectdef obj_Miner
 					}
 
 					; If in orca delivery and orca not in belt, flee
-					This.CurrentState:Set["FLEE"]
+					;This.CurrentState:Set["FLEE"]
 					UI:UpdateConsole["FLEE: Orca not in belt (temporary)"]
 					return
 				}
@@ -298,12 +298,12 @@ objectdef obj_Miner
 			}
 
 			; If in group mode, not the master, and dont warp to the master... flee
-			if ${Config.Miner.GroupMode} && !${IsMaster} && !${WarpToMaster}
-			{
-				This.CurrentState:Set["FLEE"]
-				UI:UpdateConsole["FLEE: Master not in belt (temporary)"]
-				return
-			}
+			;if ${Config.Miner.GroupMode} && !${IsMaster} && !${WarpToMaster}
+			;{
+			;	This.CurrentState:Set["FLEE"]
+			;	UI:UpdateConsole["FLEE: Master not in belt (temporary)"]
+			;	return
+			;}
 		}
 
 		;	If I'm in a station, I need to perform what I came there to do
@@ -643,7 +643,10 @@ objectdef obj_Miner
 						}
 						if ${EVE.Bookmark[${Config.Miner.DeliveryLocation}](exists)} && ${EVE.Bookmark[${Config.Miner.DeliveryLocation}].SolarSystemID} == ${Me.SolarSystemID}
 						{
+							Ship.Drones:ReturnAllToDroneBay
+							wait 10
 							UI:UpdateConsole["Debug: Station.DockAtStation called from Line _LINE_ ", LOG_DEBUG]
+							relay all -event EVEBot_Master_InBelt FALSE
 							call Station.DockAtStation ${EVE.Bookmark[${Config.Miner.DeliveryLocation}].ItemID}
 							break
 						}
@@ -798,7 +801,7 @@ objectdef obj_Miner
 							break
 						}
 
-						if !${Entity[${Orca.Escape}](exists)} && ${Local[${Config.Miner.DeliveryLocation}].ToFleetMember}
+						if !${Entity[${Orca.Escape}](exists)} && ${Local[${Config.Miner.DeliveryLocation}].ToFleetMember} && ${WarpToMaster}
 						{
 							UI:UpdateConsole["ALERT:  The orca is not in this belt.  Warping there first to unload."]
 							UI:UpdateConsole["Debug: Fleet Warping to ${Config.Miner.DeliveryLocation} from Line _LINE_ ", LOG_DEBUG]
@@ -909,12 +912,12 @@ objectdef obj_Miner
 		}
 
 		;	If our ship has no mining lasers, panic so the user knows to correct their configuration and try again
-		if ${Ship.TotalMiningLasers} == 0
-		{
-			UI:UpdateConsole["ALERT: No mining lasers detected.  Returning to station."]
-			EVEBot.ReturnToStation:Set[TRUE]
-			return
-		}
+		;if ${Ship.TotalMiningLasers} == 0
+		;{
+			;UI:UpdateConsole["ALERT: No mining lasers detected.  Returning to station."]
+			;EVEBot.ReturnToStation:Set[TRUE]
+			;return
+		;}
 
 		Orca:Set[Name = "${Config.Miner.DeliveryLocation}"]
 		Master:Set[Name = "${MasterName}"]
@@ -1027,6 +1030,12 @@ objectdef obj_Miner
 				{
 					UI:UpdateConsole["ALERT:  ${Entity[${Orca.Escape}].Name} is a long way away.  Warping to it."]
 					UI:UpdateConsole["Debug: Entity:WarpTo to Orca from Line _LINE_ ", LOG_DEBUG]
+					if ${Ship.Drones.DronesInSpace} >= 1
+					{
+						EVE:Execute[CmdDronesReturnToBay]
+						wait 750
+					}
+					
 					Entity[${Orca.Escape}]:WarpTo[1000]
 					return
 				}
@@ -1204,13 +1213,23 @@ objectdef obj_Miner
 			((${Config.Miner.DistributeLasers} && !${Config.Miner.IceMining}) && ${Asteroids.LockedAndLocking} < ${Ship.SafeMaxLockedTargets})
 		{
 			;	Calculate how many asteroids we need
-			variable int AsteroidsNeeded=${Ship.TotalMiningLasers}
-
-			;	If we're supposed to use Mining Drones, we need one more asteroid
-			if ${Config.Miner.UseMiningDrones}
+			if ${Config.Miner.UseMiningDrones} && ${Ship.TotalMiningLasers} == 0
+				{
+					variable int AsteroidsNeeded=2
+				}
+			;	I don't know what I was doing here
+			if ${Config.Miner.UseMiningDrones} && ${Ship.TotalMiningLasers} == 0
 			{
 				AsteroidsNeeded:Inc
 			}
+			
+
+			;	If we're supposed to use Mining Drones, we need one more asteroid
+			if ${Config.Miner.UseMiningDrones} && ${Ship.TotalMiningLasers} != 0
+			{
+				AsteroidsNeeded:Inc
+			}
+	
 			if ${Config.Miner.IceMining}
 			{
 				AsteroidsNeeded:Set[1]
@@ -1221,17 +1240,23 @@ objectdef obj_Miner
 			;	it's in the belt, use Asteroids.TargetNextInRange to only target roids nearby
 			if (${Math.Calc[${Me.TargetCount} + ${Me.TargetingCount}]} < ${Ship.SafeMaxLockedTargets}) && ${Asteroids.LockedAndLocking} < ${AsteroidsNeeded}
 			{
-				if ${Config.Miner.DeliveryLocationTypeName.Equal[Orca]} && ${Entity[${Orca.Escape}](exists)}
+				;if ${Config.Miner.DeliveryLocationTypeName.Equal[Orca]} && ${Entity[${Orca.Escape}](exists)}
+				;{
+				;	call Asteroids.TargetNextInRange ${Entity[${Orca.Escape}].ID}
+				;}
+				;elseif ${Config.Miner.GroupMode} && ${Config.Miner.GroupModeAtRange}
+				;{
+				;	call Asteroids.TargetNextInRange ${Entity[${Master.Escape}].ID}
+				;}
+				;	Using only drones, we really want to not spend 3 days slowboating around like an idiot, let's try to target only asteroids that are near each other.
+				;elseif ${Config.Miner.UseMiningDrones} && ${Ship.TotalMiningLasers} == 0
+				;{
+				;	call Asteroids.TargetInClusters ${Me.ActiveTarget}.ID}
+				;}
+				;else
 				{
-					call Asteroids.TargetNextInRange ${Entity[${Orca.Escape}].ID}
-				}
-				elseif ${Config.Miner.GroupMode} && ${Config.Miner.GroupModeAtRange}
-				{
+					;call Asteroids.TargetNext
 					call Asteroids.TargetNextInRange ${Entity[${Master.Escape}].ID}
-				}
-				else
-				{
-					call Asteroids.TargetNext
 				}
 				This.ConcentrateFire:Set[!${Return}]
 				if ${Return}
@@ -1252,7 +1277,7 @@ objectdef obj_Miner
 		}
 
 		;	Time to get those lasers working!
-		if ${Ship.TotalActivatedMiningLasers} < ${Ship.TotalMiningLasers}
+		if ${Ship.TotalActivatedMiningLasers} < ${Ship.TotalMiningLasers} || ${Ship.TotalMiningLasers} == 0 && ${Config.Miner.UseMiningDrones}
 		{
 			wait 200 ${Me.TargetingCount} == 0
 			LockedTargets:Clear
@@ -1282,45 +1307,276 @@ objectdef obj_Miner
 				isBeingMined:Set[${Ship.IsMiningAsteroidID[${Target.Value.ID}]}]
 				isBeingDroneMined:Set[${Ship.Drones.IsMiningAsteroidID[${Target.Value.ID}]}]
 
+
+
+
+
 				if ${This.ConcentrateFire} || \
+					${Config.Miner.IceMining} || \
 					!${Config.Miner.DistributeLasers} || \
-					(!${isBeingMined} || !${isBeingDroneMined})
+
+					(!${Ship.IsMiningAsteroidID[${Target.Value.ID}]} && !${Ship.Drones.IsMiningAsteroidID[${Target.Value.ID}]})
 				{
-					;	The target is locked, it's our active target, and we should be in range.  Get a laser on that puppy!
-					if ${Entity[${Target.Value.ID}].Distance} <= ${Ship.OptimalMiningRange[1]}
+
+
+
+					;	Find out if we need to approach this target - also don't approach if we're approaching another target
+					if ${Ship.TotalMiningLasers} == 0 && ${Config.Miner.UseMiningDrones}
 					{
-						; If either it's not being mined OR we're not distributing lasers
-						; OR, we're concentrating fire
-						; Then activate a laser
-						if (!${isBeingMined} || !${Config.Miner.DistributeLasers}) || ${This.ConcentrateFire}
+
+
+
+
+						if ${Me.ActiveTarget.Distance} > 5000 && ${This.Approaching} == 0 
 						{
-							call Ship.ActivateFreeMiningLaser ${Target.Value.ID}
+
+							UI:UpdateConsole["Miner.Mine: Approaching ${Me.ActiveTarget.Name}"]
+							Me.ActiveTarget:Approach[5000]
+							Ship:Activate_AfterBurner
+							This.Approaching:Set[${Me.ActiveTarget.ID}]
+							This.TimeStartedApproaching:Set[${Time.Timestamp}]
+							return
 						}
-/*
-BUG - This is broken. It relies on the activatarget, there's no checking if they're already mining something, etc
-						;	If we're supposed to be using Mining Drones, send them - remember not to do so if we're ice mining
-						if !${isBeingMined} && ${Ship.Drones.DronesInSpace} > 0 && ${Config.Miner.UseMiningDrones} && !${Config.Miner.IceMining}
-						{
-							Ship.Drones:ActivateMiningDrones
-							continue
-						}
-*/
+
+
+
+
 					}
 					else
-					{
-						;	We need to approach this target - also don't approach if we're approaching another target
-						if ${This.Approaching} == 0
+						if ${Entity[${Target.Value.ID}].Distance} > ${Ship.OptimalMiningRange[1]} && ${This.Approaching} == 0 
 						{
-							This:StartApproaching[${Target.Value.ID}]
-							continue
+
+
+							UI:UpdateConsole["Miner.Mine: Approaching ${Target.Value.Name}"]
+							Entity[${Target.Value.ID}]:Approach[${Ship.OptimalMiningRange[1]}]
+							This.Approaching:Set[${Target.Value.ID}]
+							This.TimeStartedApproaching:Set[${Time.Timestamp}]
+							return
+						}
+
+					;	Launch the God Damn Drones Please
+					Ship:Activate_Gang_Links
+					
+					if ${Ship.Drones.DronesInSpace} == 0 && ${Config.Miner.UseMiningDrones}
+					;&& !${Config.Miner.IceMining}
+					{
+						Ship.Drones:LaunchMining
+						;UI:UpdateConsole["Launch the God Damn Drones Please"]
+						wait 100
+					}
+
+					;	Mine the God Damn Rocks Please
+					;if ${Defend.AttackDrones.Used} == 0 && ${Me.TargetedByCount} > 0
+					;{
+						;UI:UpdateConsole["Miner.Defend: Recalling Drones"]
+						;Ship.Drones:ReturnAllToDroneBay
+					;}
+					
+					if ${Me.InSpace} && ${Config.Miner.UseMiningDrones} && ${Me.TargetCount} != 0
+					{
+					;relay all -event EVEBot_Master_InBelt TRUE
+					relay all -event EVEBot_Orca_InBelt TRUE
+					}
+					
+					if ${Ship.SafeMaxLockedTargets} > ${Math.Calc[${Me.TargetingCount}+${Me.TargetCount} + 2]}
+					{
+						call Asteroids.TargetNextInRange ${Me.ActiveTarget}.ID}
+					}
+					;SpookyList:GetIterator[SpookyIterator]
+					;variable iterator SpookyIterator
+					variable index:entity SpookyList
+					Me:GetTargetedBy[SpookyList]
+					SpookyList:RemoveByQuery[${LavishScript.CreateQuery["ID(exists)"]}, FALSE]
+					SpookyList:Collapse
+					
+					
+					if ${Ship.Drones.DronesInSpace} > 0 && ${Config.Miner.UseMiningDrones} && ${SpookyList.Used} == 0
+					;${Me.TargetedByCount} >= 1
+					;&& !${Config.Miner.IceMining}
+					{
+
+
+						variable iterator DroneIteratorC
+						variable index:activedrone ActiveDroneListC
+						Me:GetActiveDrones[ActiveDroneListC]
+						ActiveDroneListC:GetIterator[DroneIteratorC]
+						variable index:int64 returnIndex
+						variable index:int64 engageIndex
+						
+						UI:UpdateConsole["Step 1"]
+						if ${DroneIteratorC:First(exists)}
+						do
+						{
+
+
+							if ${DroneIteratorC.Value.ToEntity.GroupID} != 101
+							{
+								UI:UpdateConsole["Mine Function Recall"]
+								Ship.Drones:ReturnAllToDroneBay
+							}
+						}
+						while ${DroneIteratorC:Next(exists)}
+						
+						
+						if ${Ship.Drones.DronesInSpace[FALSE]} == 0
+						{
+							Ship.Drones:LaunchMining
+							wait 50
+						}
+						variable iterator DroneIteratorD
+						variable index:activedrone ActiveDroneListD					
+						Me:GetActiveDrones[ActiveDroneListD]
+						ActiveDroneListD:GetIterator[DroneIteratorD]
+						if ${DroneIteratorD:First(exists)}
+						do
+						{
+						
+							if ${DroneIteratorD.Value.ToEntity.GroupID} != GROUP_FIGHTERDRONE && \
+							(${DroneIteratorD.Value.ToEntity.ShieldPct} < 80 || \
+							${DroneIteratorD.Value.ToEntity.ArmorPct} < 0)
+							{
+								UI:UpdateConsole["Recalling Damaged Drone ${DroneIteratorD.Value.ID} Shield %: ${DroneIterator.Value.ToEntity.ShieldPct} Armor %: ${DroneIterator.Value.ToEntity.ArmorPct}"]
+								returnIndex:Insert[${DroneIteratorD.Value.ID}]
+
+							}
+							else
+							{
+								wait 10
+								UI:UpdateConsole["Debug: Engage Target ${DroneIteratorD.Value.ID}"]
+								engageIndex:Insert[${DroneIteratorD.Value.ID}]
+							}
+						}
+						while ${DroneIteratorD:Next(exists)}
+						
+						if ${returnIndex.Used} > 0
+						{
+							EVE:DronesReturnToDroneBay[returnIndex]
+						}
+						if ${Ship.Drones.DronesInSpace[FALSE]} > 0
+						{
+							Ship.Drones:ActivateMiningDrones
 						}
 					}
 
+					;	The target is locked, it's our active target, and we should be in range.  Get a laser on that puppy!
+					if ${Ship.TotalMiningLasers} == 0 && ${Config.Miner.UseMiningDrones}
+					{
+					;UI:UpdateConsole["Totally forgot m8"]
+					}
+					else
+					if ${Entity[${Target.Value.ID}].Distance} <= ${Ship.OptimalMiningRange[1]}
+						{
+							call Ship.ActivateFreeMiningLaser ${Target.Value.ID}
+						}
+					
 				}
 			}
 			while ${Target:Next(exists)}
 		}
 
+		;	If we've been approaching for more than 2 minutes, we need to give up and try again
+		if ${Math.Calc[${TimeStartedApproaching} - ${Time.Timestamp}]} < -120 && ${This.Approaching} != 0
+		{
+			This.Approaching:Set[0]
+			This.TimeStartedApproaching:Set[0]
+			This.ApproachingOrca:Set[FALSE]
+			return
+		}
+
+		;	If we're approaching a target, find out if we need to stop doing so
+		if ${Ship.TotalMiningLasers} == 0 && ${Config.Miner.UseMiningDrones}
+		{
+			if (${Entity[${This.Approaching}](exists)} && \
+				${Entity[${This.Approaching}].Distance} <= 5000 && \
+				${This.Approaching} != 0 && \
+				!${This.ApproachingOrca}) || \
+				(!${Entity[${This.Approaching}](exists)} && ${This.Approaching} != 0)
+			{
+				EVE:Execute[CmdStopShip]
+				Ship:Deactivate_AfterBurner
+				This.Approaching:Set[0]
+				This.TimeStartedApproaching:Set[0]
+			}
+		}
+		
+			else
+		{
+			if (${Entity[${This.Approaching}](exists)} && \
+				${Entity[${This.Approaching}].Distance} <= ${Ship.OptimalMiningRange[1]} && \
+				${This.Approaching} != 0 && \
+				!${This.ApproachingOrca}) || \
+				(!${Entity[${This.Approaching}](exists)} && ${This.Approaching} != 0)
+			{
+				EVE:Execute[CmdStopShip]
+				Ship:Deactivate_AfterBurner
+				This.Approaching:Set[0]
+				This.TimeStartedApproaching:Set[0]
+			}
+		}
+		
+		if ${Me.InSpace}
+		{
+			Ship:Open
+			call Ship.OpenCargo
+			EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipOreHold]:MakeActive
+
+			if !${Ship.CorpHangarEmpty} && ${Config.Miner.MasterMode}
+			{
+				Ship:StackCorpHangar
+				if !${Ship.OreHoldFull} && !${Config.Miner.DeliveryLocationTypeName.Equal["No Delivery"]} && !${Config.Miner.DeliveryLocationTypeName.Equal["Jetcan"]}
+				{
+					call Cargo.TransferCargoFromShipCorporateHangarToOreHold
+					Ship:StackOreHold
+					return
+				}
+				if !${Ship.CargoFull} && !${Config.Miner.DeliveryLocationTypeName.Equal["No Delivery"]}
+				{
+					call Cargo.TransferCargoFromShipCorporateHangarToCargoHold
+					Ship:StackCargoHold
+					return
+				}
+				if ${Config.Miner.DeliveryLocationTypeName.Equal["No Delivery"]} && !${Ship.CorpHangarFull}
+				{
+					;call Cargo.TransferCargoFromCargoHoldToShipCorporateHangar
+					relay all -event EVEBot_Orca_Cargo ${Ship.CorpHangarUsedSpace[TRUE]}
+					EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipOreHold]:MakeActive
+					wait 100
+					Call Cargo.TransferCargoFromShipOreHoldToFleetHangar
+				}
+			}
+		}
+		
+		if ${Me.InSpace}
+		{
+			if ${Ship.SafeMaxLockedTargets} > ${Math.Calc[${Me.TargetingCount}+${Me.TargetCount} + 2]}
+			{
+				call Asteroids.TargetNextInRange ${Me.ActiveTarget}.ID}
+			}
+			
+			if ${Entity[${Asteroids.NearestAsteroid}](exists)} && ${This.Approaching} == 0 && ${Ship.TotalMiningLasers} == 0 && ${Config.Miner.UseMiningDrones}
+				{
+				if ${Entity[${Asteroids.NearestAsteroid}].Distance} > WARP_RANGE
+					{
+					UI:UpdateConsole["Debug: Entity:WarpTo to NearestAsteroid from Line _LINE_ ", LOG_DEBUG]
+					Entity[${Asteroids.NearestAsteroid}]:WarpTo[10000]
+					return
+					}
+
+				;	Find out if we need to approach this asteroid
+				if ${Entity[${Asteroids.NearestAsteroid}].Distance} > 5000
+					{
+					UI:UpdateConsole["Miner.OrcaInBelt: Approaching ${Entity[${Asteroids.NearestAsteroid}].Name}"]
+					This:StartApproaching[${Entity[${Orca.Escape}].ID}, 5000]
+					return
+					}
+				}
+			}
+		;	Afterburner, please turn off.
+		if ${Me.ActiveTarget.Distance} < 5000
+			{
+				Ship:Deactivate_AfterBurner
+
+			}
 		;	This checks to make sure there aren't any potential jet can flippers around before we dump a jetcan
 		if !${Social.PlayerInRange[10000]} && ${Config.Miner.DeliveryLocationTypeName.Equal["Jetcan"]}
 		{
@@ -1485,7 +1741,7 @@ BUG - This is broken. It relies on the activatarget, there's no checking if they
 		Ship:Open
 		call Ship.OpenCargo
 
-		if !${Ship.CorpHangarEmpty}
+		if !${Ship.CorpHangarEmpty} && ${Config.Miner.MasterMode}
 		{
 			if !${Ship.OreHoldFull} && !${Config.Miner.DeliveryLocationTypeName.Equal["No Delivery"]} && !${Config.Miner.DeliveryLocationTypeName.Equal["Jetcan"]}
 			{
@@ -1501,7 +1757,7 @@ BUG - This is broken. It relies on the activatarget, there's no checking if they
 			}
 			if ${Config.Miner.DeliveryLocationTypeName.Equal["No Delivery"]}
 			{
-				call Cargo.TransferCargoFromCargoHoldToShipCorporateHangar
+				;call Cargo.TransferCargoFromCargoHoldToShipCorporateHangar
 				relay all -event EVEBot_Orca_Cargo ${Ship.CorpHangarUsedSpace[TRUE]}
 			}
 		}
@@ -1794,21 +2050,71 @@ BUG - This is broken. It relies on the activatarget, there's no checking if they
 			variable index:activedrone ActiveDroneList
 			variable iterator DroneIterator
 			variable index:int64 AttackDrones
+			variable index:int64 WrongDrones
 
 			Me:GetActiveDrones[ActiveDroneList]
 			ActiveDroneList:GetIterator[DroneIterator]
 			if ${DroneIterator:First(exists)}
 				do
 				{
-					if ${DroneIterator.Value.State} == 0
-						AttackDrones:Insert[${DroneIterator.Value.ID}]
+					if ${DroneIterator.Value.ToEntity.GroupID} == 101
+					{
+						WrongDrones:Insert[${DroneIterator.Value.ID}]
+						UI:UpdateConsole["Wrong Drones"]
+						EVE:Execute[CmdDronesReturnToBay]
+						wait 50
+						Ship.Drones:ReturnAllToDroneBay
+						wait 100
+					}
 				}
 				while ${DroneIterator:Next(exists)}
+				
+				if ${WrongDrones.Used} > 0
+					{
+					Ship.Drones:ReturnAllToDroneBay
+					UI:UpdateConsole["Wrong Drones Recall"]
+					WrongDrones:Clear
+					}
+					do
+					{
+						wait 20
+					}
+					while ${WrongDrones.Used} > 0 && ${Ship.Drones.DronesInSpace[FALSE]} > 0
+				
+			
+			if ${Ship.Drones.DronesInSpace[FALSE]} == 0
+				{
+					Ship.Drones:LaunchCombat
+					wait 50
+				}
+				
+			Me:GetActiveDrones[ActiveDroneList]
+			ActiveDroneList:GetIterator[DroneIterator]				
+			if ${DroneIterator:First(exists)}
+				do
+				{
+					if ${DroneIterator.Value.ToEntity.GroupID} == 100
+					{
+						AttackDrones:Insert[${DroneIterator.Value.ID}]
+					}
+				}
+				while ${DroneIterator:Next(exists)}
+					
 
 			if ${AttackDrones.Used} > 0
 			{
+				Entity[${Attacking}]:MakeActiveTarget
 				UI:UpdateConsole["Miner.Defend: Sending ${AttackDrones.Used} Drones to attack ${Entity[${Attacking}].Name}"]
 				EVE:DronesEngageMyTarget[AttackDrones]
+			}
+			wait 50
+			if !${Entity[${Attacking}](exists)}
+			{
+			UI:UpdateConsole["No Attackers, Recalling Drones"]
+			Ship.Drones:ReturnAllToDroneBay
+			AttackDrones:Clear
+			;Attacking:Clear
+			
 			}
 		}
 
@@ -1830,6 +2136,8 @@ BUG - This is broken. It relies on the activatarget, there's no checking if they
 							${Entity[${GetData.Value}].Distance} < ${Me.DroneControlDistance} && \
 							!${Entity[${GetData.Value}].IsLockedTarget} && \
 							!${${GetData.Value}].BeingTargeted}
+							;&& (${Math.Calc[${Me.TargetCount} + ${Me.TargetingCount}]} < ${Ship.SafeMaxLockedTargets})
+
 						{
 							Entity[${GetData.Value}]:LockTarget
 						}
@@ -1838,11 +2146,16 @@ BUG - This is broken. It relies on the activatarget, there's no checking if they
 					{
 						AttackingTeam:Remove[${GetData.Value}]
 					}
+				;if (${Math.Calc[${Me.TargetCount} + ${Me.TargetingCount}]} >= ${Ship.SafeMaxLockedTargets})
+				;{	
+				;	break
+				;}
 				}
 				while ${GetData:Next(exists)}
 		}
 
-		if ${Ship.Drones.DronesInSpace[FALSE]} > 0 && ${AttackingTeam.Used} == 0
+		if ${This.Defend.AttackDrones.Used} > 0 && !${Entity[${Attacking}](exists)}
+		;if ${Ship.Drones.DronesInSpace[FALSE]} > 0 && ${AttackingTeam.Used} == 0
 		{
 			UI:UpdateConsole["Miner.Defend: Recalling Drones"]
 			Ship.Drones:ReturnAllToDroneBay
@@ -1851,7 +2164,7 @@ BUG - This is broken. It relies on the activatarget, there's no checking if they
 		if ${Ship.Drones.DronesInSpace[FALSE]} == 0  && ${AttackingTeam.Used} > 0
 		{
 			UI:UpdateConsole["Miner.Defend: Deploying drones"]
-			Ship.Drones:LaunchAll
+			Ship.Drones:LaunchCombat
 		}
 
 		Attacking:Set[-1]

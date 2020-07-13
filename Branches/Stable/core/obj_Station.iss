@@ -275,6 +275,7 @@ objectdef obj_Station
 			}
 			while !${This.DockedAtStation[${StationID}]}
 			wait 75
+			Ship:StackOreHold
 			UI:UpdateConsoleIRC["Finished Docking"]
 		}
 		else

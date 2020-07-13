@@ -888,9 +888,6 @@ objectdef obj_Targets
 				case GROUP_LARGECOLLIDABLESHIP
 				case GROUP_LARGECOLLIDABLESTRUCTURE
 				case GROUP_ROAMINGSLEEPERSCRUISER
-				case GROUP_SLEEPER
-				case GROUP_1307
-				case GROUP_ROAMING_SLEEPERS_CRUISER
 					;UI:UpdateConsole["DEBUG: Ignoring entity ${tgtIterator.Value.Group} (${tgtIterator.Value.GroupID})"]
 					continue
 					break
