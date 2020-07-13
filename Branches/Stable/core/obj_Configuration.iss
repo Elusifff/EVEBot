@@ -342,11 +342,6 @@ objectdef obj_Configuration_Miner
 	{
 		return ${BaseConfig.BaseRef.FindSet[${This.SetName}].FindSet[Ice_Types]}
 	}
-	
-	member:settingsetref GasTypesRef()
-	{
-		return ${BaseConfig.BaseRef.FindSet[${This.SetName}].FindSet[Gas_Types]}
-	}
 
 	member:settingsetref OreVolumesRef()
 	{

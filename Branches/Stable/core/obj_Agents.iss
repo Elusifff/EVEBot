@@ -192,11 +192,8 @@ objectdef obj_Agents
 	variable int RetryCount = 0
 	variable obj_AgentList AgentList
 	variable obj_MissionBlacklist MissionBlacklist
-	
-	variable bool isGasHarvesting = FALSE
-	variable bool isIceMining = FALSE
-	variable bool isOreMining = FALSE
-	
+	variable bool IsStoryline
+
     method Initialize()
     {
     	if ${This.AgentList.agentIterator:First(exists)}
@@ -336,6 +333,17 @@ objectdef obj_Agents
 				UI:UpdateConsole["obj_Agents: DEBUG: amIterator.Value.AgentID = ${amIterator.Value.AgentID}"]
 				UI:UpdateConsole["obj_Agents: DEBUG: amIterator.Value.State = ${amIterator.Value.State}"]
 				UI:UpdateConsole["obj_Agents: DEBUG: amIterator.Value.Type = ${amIterator.Value.Type}"]
+				
+				if ${amIterator.Value.Type.Find[Storyline](exists)}
+				{
+					IsStoryline:Set[TRUE]
+					UI:UpdateConsole["Storyline ${IsStoryline}"]
+				}
+				else
+				{
+					IsStoryline:Set[FALSE]
+					UI:UpdateConsole["Storyline ${IsStoryline}"]
+				}
 				if ${amIterator.Value.State} == 1
 				{
 					if ${MissionBlacklist.IsBlacklisted[${EVE.Agent[id,${amIterator.Value.AgentID}].Level},"${amIterator.Value.Name}"]} == FALSE
@@ -344,33 +352,32 @@ objectdef obj_Agents
 						variable bool isLowSec
 						variable bool avoidLowSec
 						;variable bool isGasHarvesting
-						;variable bool isIceMining
 						isLowSec:Set[${Missions.MissionCache.LowSec[${amIterator.Value.AgentID}]}]
 						avoidLowSec:Set[${Config.Missioneer.AvoidLowSec}]
 						;isGasHarvesting:Set[${Missions.MissionCache.GasHarvesting[${amIterator.Value.AgentID},${isGasHarvesting}]}]
-						;isIceMining:Set[${Missions.MissionCache.IceMining[${amIterator.Value.AgentID},${isIceMining}]}]
 						if ${avoidLowSec} == FALSE || (${avoidLowSec} == TRUE && ${isLowSec} == FALSE)
 						{
-							if ${amIterator.Value.Type.Find[Courier](exists)} && ${Config.Missioneer.RunCourierMissions} == TRUE
+							if ${amIterator.Value.Type.Find[Courier](exists)} && ${Config.Missioneer.RunCourierMissions} == TRUE && !${IsStoryline}
+							{
+								This:SetActiveAgent[${EVE.Agent[id,${amIterator.Value.AgentID}].Name}]
+								UI:UpdateConsole["${IsStoryline}"]
+								return
+							}
+
+							if ${amIterator.Value.Type.Find[Trade](exists)} && ${Config.Missioneer.RunTradeMissions} == TRUE && !${IsStoryline}
 							{
 								This:SetActiveAgent[${EVE.Agent[id,${amIterator.Value.AgentID}].Name}]
 								return
 							}
 
-							if ${amIterator.Value.Type.Find[Trade](exists)} && ${Config.Missioneer.RunTradeMissions} == TRUE
-							{
-								This:SetActiveAgent[${EVE.Agent[id,${amIterator.Value.AgentID}].Name}]
-								return
-							}
-
-							if ${amIterator.Value.Type.Find[Mining](exists)} && ${Config.Missioneer.RunMiningMissions} == TRUE && ${skipList.Contains[${Config.Agents.AgentID[${agentName}]}]} == FALSE
+							if ${amIterator.Value.Type.Find[Mining](exists)} && ${Config.Missioneer.RunMiningMissions} == TRUE && ${skipList.Contains[${Config.Agents.AgentID[${agentName}]}]} == FALSE && !${IsStoryline}
 							{
 								UI:UpdateConsole["HELL CIRCUS"]
 								This:SetActiveAgent[${EVE.Agent[id,${amIterator.Value.AgentID}].Name}]
 								return
 							}
 
-							if ${amIterator.Value.Type.Find[Encounter](exists)} && ${Config.Missioneer.RunKillMissions} == TRUE
+							if ${amIterator.Value.Type.Find[Encounter](exists)} && ${Config.Missioneer.RunKillMissions} == TRUE && !${IsStoryline}
 							{
 								UI:UpdateConsole["Setting ActiveAgent to ${EVE.Agent[id,${amIterator.Value.AgentID}].Name}", LOG_DEBUG]
 								This:SetActiveAgent[${EVE.Agent[id,${amIterator.Value.AgentID}].Name}]
@@ -523,36 +530,44 @@ objectdef obj_Agents
 		{
 			do
 			{
+				if ${amIterator.Value.Type.Find[Storyline](exists)}
+				{
+					IsStoryline:Set[TRUE]
+					UI:UpdateConsole["${Storyline IsStoryline}"]
+				}
+				else
+				{
+					IsStoryline:Set[FALSE]
+					UI:UpdateConsole["${Storyline IsStoryline}"]
+				}
 				if ${amIterator.Value.State} > 1
 				{
 					if ${MissionBlacklist.IsBlacklisted[${EVE.Agent[id,${amIterator.Value.AgentID}].Level},"${amIterator.Value.Name}"]} == FALSE
 					{
 						variable bool isLowSec
-						;variable bool avoidLowSec
+						variable bool avoidLowSec
 						;variable bool isGasHarvesting
-						;variable bool isIceMining
 						isLowSec:Set[${Missions.MissionCache.LowSec[${amIterator.Value.AgentID}]}]
-						;isGasHarvesting:Set[${Missions.MissionCache.GasHarvesting[${amIterator.Value.AgentID},${isGasHarvesting}]}]
-						;isIceMining:Set[${Missions.MissionCache.IceMining[${amIterator.Value.AgentID},${isIceMining}]}]
+						isGasHarvesting:Set[${Missions.MissionCache.GasHarvesting[${amIterator.Value.AgentID},${isGasHarvesting}]}]
 						avoidLowSec:Set[${Config.Missioneer.AvoidLowSec}]
 						if ${avoidLowSec} == FALSE || (${avoidLowSec} == TRUE && ${isLowSec} == FALSE)
 						{
-							if ${amIterator.Value.Type.Find[Courier](exists)} && ${Config.Missioneer.RunCourierMissions} == TRUE
+							if ${amIterator.Value.Type.Find[Courier](exists)} && ${Config.Missioneer.RunCourierMissions} == TRUE && !${IsStoryline}
 							{
 								return TRUE
 							}
 
-							if ${amIterator.Value.Type.Find[Trade](exists)} && ${Config.Missioneer.RunTradeMissions} == TRUE
+							if ${amIterator.Value.Type.Find[Trade](exists)} && ${Config.Missioneer.RunTradeMissions} == TRUE && !${IsStoryline}
 							{
 								return TRUE
 							}
 
-							if ${amIterator.Value.Type.Find[Mining](exists)} && ${Config.Missioneer.RunMiningMissions} == TRUE
+							if ${amIterator.Value.Type.Find[Mining](exists)} && ${Config.Missioneer.RunMiningMissions} == TRUE && !${IsStoryline}
 							{
 								return TRUE
 							}
 
-							if ${amIterator.Value.Type.Find[Encounter](exists)} && ${Config.Missioneer.RunKillMissions} == TRUE
+							if ${amIterator.Value.Type.Find[Encounter](exists)} && ${Config.Missioneer.RunKillMissions} == TRUE && !${IsStoryline}
 							{
 								return TRUE
 							}
@@ -770,10 +785,6 @@ objectdef obj_Agents
 		UI:UpdateConsole["obj_Agents: DEBUG: amIterator.Value.Name = ${amIterator.Value.Name}"]
 		UI:UpdateConsole["obj_Agents: DEBUG: amIterator.Value.ExpirationTime = ${amIterator.Value.ExpirationTime.DateAndTime}"]
 
-		isOreMining:Set[FALSE]
-		isIceMining:Set[FALSE]
-		isGasHarvesting:Set[FALSE]
-		
 		amIterator.Value:GetDetails
 		variable string details
 		variable int left = 0
@@ -783,7 +794,7 @@ objectdef obj_Agents
 		{
 			UI:UpdateConsole["obj_Agents: ERROR: Mission details window was not found!"]
 			UI:UpdateConsole["obj_Agents: DEBUG: amIterator.Value.Name.Escape = ${amIterator.Value.Name.Escape}"]
-			EVE:Execute[CmdCloseActiveWindow]
+			EVE:Execute[CmdCloseAllWindows]
 			return
 		}
 		; The embedded quotes look odd here, but this is required to escape the comma that exists in the caption and in the resulting html.
@@ -906,63 +917,19 @@ objectdef obj_Agents
 		Missions.MissionCache:SetLowSec[${amIterator.Value.AgentID},${isLowSec}]
 		
 		;Mining Missions, Gas Harvesting Determination
-
-		left:Set[${details.Escape.Find["Cytoserocin"]}]
-        right:Set[${details.Escape.Find["Cytoserocin"]}]
-		if ${left} > 0 || ${right} > 0
-		{
-            UI:UpdateConsole["obj_Agents: DEBUG: left = ${left}"]
-            UI:UpdateConsole["obj_Agents: DEBUG: right = ${right}"]
-			isGasHarvesting:Set[TRUE]
-			UI:UpdateConsole["obj_Agents: DEBUG: isGasHarvesting = ${isGasHarvesting}"]
-			UI:UpdateConsole["GAS SITE its alright"]
-			;Script:Pause
-		}
-		Missions.MissionCache:SetGasHarvesting[${amIterator.Value.AgentID},${isGasHarvesting}]
-		
-		;Mining Missions, Ice Mining Determination
-		
-		left:Set[${details.Escape.Find["Azure"]}]
-        right:Set[${details.Escape.Find["Azure"]}]
-		if ${left} > 0 || ${right} > 0
-		{
-            UI:UpdateConsole["obj_Agents: DEBUG: left = ${left}"]
-            UI:UpdateConsole["obj_Agents: DEBUG: right = ${right}"]
-			isIceMining:Set[TRUE]
-			UI:UpdateConsole["obj_Agents: DEBUG: isIceMining = ${isIceMining}"]
-			UI:UpdateConsole["As cold as Ice"]
-			;Script:Pause
-		}
-		Missions.MissionCache:SetIceMining[${amIterator.Value.AgentID},${isIceMining}]
-		
-		left:Set[${details.Escape.Find["Ice Harvester"]}]
-        right:Set[${details.Escape.Find["Ice Harvester"]}]
-		if ${left} > 0 || ${right} > 0
-		{
-            UI:UpdateConsole["obj_Agents: DEBUG: left = ${left}"]
-            UI:UpdateConsole["obj_Agents: DEBUG: right = ${right}"]
-			isIceMining:Set[TRUE]
-			UI:UpdateConsole["obj_Agents: DEBUG: isIceMining = ${isIceMining}"]
-			UI:UpdateConsole["As cold as Ice"]
-			;Script:Pause
-		}
-		;Mining Missions, Ore Mining Determination
-		
-		;left:Set[${details.Escape.Find["NOTGOOD"]}]
-        ;right:Set[${details.Escape.Find["NOTGOOD"]}]
+		;variable bool isGasHarvesting = FALSE
+		;left:Set[${details.Escape.Find["(Low Sec Warning!)"]}]
+        ;right:Set[${details.Escape.Find["(You need to fit a Gas Cloud Harvester to complete this mission.)"]}]
 		;if ${left} > 0 || ${right} > 0
 		;{
-         ;   UI:UpdateConsole["obj_Agents: DEBUG: left = ${left}"]
-          ;  UI:UpdateConsole["obj_Agents: DEBUG: right = ${right}"]
-			;isOreMining:Set[TRUE]
-			;UI:UpdateConsole["obj_Agents: DEBUG: isOreMining = ${isOreMining}"]
-			;UI:UpdateConsole["Standard Ore Mining"]
+        ;    UI:UpdateConsole["obj_Agents: DEBUG: left = ${left}"]
+        ;    UI:UpdateConsole["obj_Agents: DEBUG: right = ${right}"]
+		;	isGasHarvesting:Set[TRUE]
+		;	UI:UpdateConsole["obj_Agents: DEBUG: isGasHarvesting = ${isGasHarvesting}"]
 		;}
-		;Missions.MissionCache:SetOreMining[${amIterator.Value.AgentID},${isOreMining}]
-		
-		
-  }
+		;Missions.MissionCache:SetGasHarvesting[${amIterator.Value.AgentID},${isGasHarvesting}]
 
+  }
 
 	function UpdateLocatorAgent()
 	{
@@ -1119,10 +1086,7 @@ objectdef obj_Agents
 		detailsFile:Close
 
 		Missions.MissionCache:AddMission[${amIterator.Value.AgentID},"${amIterator.Value.Name}"]
-		;if ${amIterator.Value.Name} == "Stay Frosty"
-		;{
-		
-		;}
+
 		variable int factionID = 0
 		left:Set[${details.Escape.Find["<img src=\\\"factionlogo:"]}]
 		if ${left} > 0
@@ -1261,7 +1225,7 @@ objectdef obj_Agents
 				Config:Save[]
 			}
 		}
-		elseif ${MissionBlacklist.IsBlacklisted[${EVE.Agent[id,${amIterator.Value.AgentID}].Level},"${amIterator.Value.Name}"]} == TRUE
+		elseif ${MissionBlacklist.IsBlacklisted[${EVE.Agent[id,${amIterator.Value.AgentID}].Level},"${amIterator.Value.Name}"]} == TRUE || ${IsStoryline}
 		{
 			if ${lastDecline.Timestamp} >= ${Time.Timestamp} && !${Config.Miner.IceMining}
 			{

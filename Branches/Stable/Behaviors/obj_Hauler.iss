@@ -685,7 +685,6 @@ objectdef obj_Hauler
 		if ${Entity[Name = "${Config.Hauler.HaulerPickupName}"](exists)}
 		{
 			OrcaID:Set[${Entity[Name = "${Config.Hauler.HaulerPickupName}"]}]
-			;UI:UpdateConsole["${OrcaID}"]
 		}
 		else
 		{
@@ -708,12 +707,19 @@ objectdef obj_Hauler
 		if ${Entity[${OrcaID}].Distance} > LOOT_RANGE && ${This.Approaching} == 0
 		{
 			UI:UpdateConsole["ALERT: Approaching to within loot range."]
-			Entity[${OrcaID}]:Approach
+			Entity[${OrcaID}]:KeepAtRange[1000]
 			This.Approaching:Set[${OrcaID}]
 			This.TimeStartedApproaching:Set[${Time.Timestamp}]
 			return
 		}
 
+		if ${Entity[${OrcaID}].Distance} > WARP_RANGE
+		{
+			UI:UpdateConsole["ALERT: The orca is not nearby.  Warping there first to pick up."]
+			Local[${Config.Hauler.HaulerPickupName}].ToFleetMember:WarpTo
+			return
+		
+		}
 		;	If we've been approaching for more than 2 minutes, we need to give up and try again
 		if ${Math.Calc[${TimeStartedApproaching}-${Time.Timestamp}]} < -120 && ${This.Approaching} != 0
 		{
@@ -725,7 +731,7 @@ objectdef obj_Hauler
 		if ${Entity[${This.Approaching}](exists)} && ${Entity[${This.Approaching}].Distance} <= LOOT_RANGE && ${This.Approaching} != 0
 		{
 			UI:UpdateConsole["ALERT: Within loot range."]
-			EVE:Execute[CmdStopShip]
+			;EVE:Execute[CmdStopShip]
 			This.Approaching:Set[0]
 			This.TimeStartedApproaching:Set[0]
 		}
@@ -741,7 +747,6 @@ objectdef obj_Hauler
 			}
 			UI:UpdateConsole["ALERT: Transferring Cargo"]
 			call Cargo.TransferListFromShipCorporateHangar ${OrcaID}
-			;call Cargo.TransferCargoFromShipCorporateHangarToOreHold ${OrcaID}
 		}
 
 		return
@@ -1028,6 +1033,12 @@ objectdef obj_Hauler
 		{
 			UI:UpdateConsole["ERROR: ORE Delivery location & type must be specified (on the miner tab) - docking"]
 			EVEBot.ReturnToStation:Set[TRUE]
+			
+			if ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipOreHold](exists)}
+			{
+				EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipOreHold]:MakeActive
+				EVEWindow["Inventory"]:StackAll
+			}
 			return
 		}
 		switch ${Config.Miner.DeliveryLocationTypeName}
@@ -1267,7 +1278,7 @@ objectdef obj_Hauler
 	;	*	Are our miners ice mining
 	member:bool HaulerFull()
 	{
-		if ${MyShip.HasOreHold} && ${Ship.OreHoldFreeSpace} < 1000
+		if ${MyShip.HasOreHold} && ${Ship.OreHoldFull}
 		{
 			UI:UpdateConsole["Ore Hold Full. Dropping off cargo."]
 			return TRUE

@@ -442,14 +442,14 @@ objectdef obj_Cargo
 		variable iterator CargoIterator
 		variable float VolumeToMove=0
 		variable index:int64 ListToMove
-		;Entity[${dest}]:GetFleetHangarCargo[HangarCargo]
-		;EVEInvWindow:MakeChildActive[ShipFleetHangar]
 		EVEWindow[Inventory].ChildWindow[${dest}, ShipFleetHangar]:MakeActive
+		wait 50
 		EVEWindow[Inventory].ActiveChild:GetItems[HangarCargo]
 		
 		HangarCargo:RemoveByQuery[${LavishScript.CreateQuery[Name =- "Mining Crystal"]}]
-
+		UI:UpdateConsole["FleetHangarItems ${HangarCargo.Used}"]
 		HangarCargo:GetIterator[CargoIterator]
+		
 		call Ship.OpenCargo
 
 		UI:UpdateConsole["DEBUG: TransferListFromShipCorporateHangar", LOG_DEBUG]
@@ -464,19 +464,26 @@ objectdef obj_Cargo
 					{
 						ListToMove:Insert[${CargoIterator.Value.ID}]
 						VolumeToMove:Inc[${Math.Calc[${CargoIterator.Value.Quantity} * ${CargoIterator.Value.Volume}]}]
+						UI:UpdateConsole["Volume ${CargoIterator.Value.Volume}"]
+						UI:UpdateConsole["Quantity ${CargoIterator.Value.Quantity}"]
+						UI:UpdateConsole["Total Volume ${VolumeToMove}"]
+						
 					}
 					else
 					{
 						CargoIterator.Value:MoveTo[${MyShip.ID}, OreHold, ${Math.Calc[(${Ship.OreHoldFreeSpace} - ${VolumeToMove}) / ${CargoIterator.Value.Volume}]}]
-						Ship:StackOreHold
+						;Ship:StackOreHold
+						UI:UpdateConsole["Volume ${CargoIterator.Value.Volume}"]
+						UI:UpdateConsole["Quantity ${CargoIterator.Value.Quantity}"]
 						break
 					}
 				}
 				while ${CargoIterator:Next(exists)}
-				if ${ListToMove.Used}
+				if ${ListToMove.Used} > 0
 				{
+					UI:UpdateConsole["ThingsToMove ${ListToMove.Used}"]
 					EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipOreHold]:MakeActive
-					wait 100
+					wait 50
 					EVE:MoveItemsTo[ListToMove, MyShip, OreHold]
 					Ship:StackOreHold
 				}
@@ -509,7 +516,7 @@ objectdef obj_Cargo
 					if ${CargoIterator.Value.CategoryID} == CATEGORYID_ORE
 					{
 						EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipOreHold]:MakeActive
-						wait 100
+						wait 500
 						
 						if (${CargoIterator.Value.Quantity} * ${CargoIterator.Value.Volume}) > ${Ship.OreHoldFreeSpace}
 						{
@@ -579,7 +586,7 @@ objectdef obj_Cargo
 		variable index:item HangarCargo
 		variable iterator CargoIterator
 		variable float VolumeToMove=0
-		variable int QuantityToMove
+		variable index:int64 ListToMove
 		
 		MyShip:GetOreHoldCargo[HangarCargo]
 		HangarCargo:GetIterator[CargoIterator]
@@ -588,12 +595,6 @@ objectdef obj_Cargo
 		{
 				do
 				{
-					if ${EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipFleetHangar](exists)}
-					{
-						EVEWindow[Inventory].ChildWindow[${MyShip.ID}, ShipFleetHangar]:MakeActive
-						EVEWindow["Inventory"]:StackAll
-					}
-					wait 100
 					if (${CargoIterator.Value.Quantity} * ${CargoIterator.Value.Volume}) > ${Ship.CorpHangarFreeSpace}
 					{
 						QuantityToMove:Set[${Math.Calc[${Ship.CorpHangarFreeSpace} / ${CargoIterator.Value.Volume}]}]
@@ -1368,7 +1369,7 @@ objectdef obj_Cargo
 			if ${ListToMove.Used}
 			{
 				UI:UpdateConsole["Moving ${ListToMove.Used} items to hangar."]
-				EVE:MoveItemsTo[ListToMove, ${Me.Station.ID}, Hangar]
+				EVE:MoveItemsTo[ListToMove, MyStationHangar, Hangar]
 				wait 10
 			}
 		}

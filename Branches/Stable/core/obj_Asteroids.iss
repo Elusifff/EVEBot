@@ -7,28 +7,20 @@
 
 	-- CyberTech
 
-BUGS:
-	we don't differentiate between ice fields and ore fields, need to match field type to laser type.
-
 */
-
-objectdef obj_AsteroidGroup
-{
-}
 
 objectdef obj_Asteroids
 {
-	variable string SVN_REVISION = "$Rev$"
-	variable int Version
+	;	Pulse tracking information
+	variable time NextPulse
+	variable int PulseIntervalInSeconds = 30
 
 	variable int AsteroidCategoryID = 25
 
-	variable index:entity BestAsteroidList
+	variable index:entity AsteroidList_Surveyed
 	variable index:entity AsteroidList
-	variable iterator OreTypeIterator
-
-	; Should only be referenced inside NextAsteroid()
-	variable iterator NextAsteroidIterator
+	; List of asteroids claimed by other bots
+	variable set AsteroidList_Claimed
 
 	variable index:string EmptyBeltList
 	variable iterator EmptyBelt
@@ -39,15 +31,76 @@ objectdef obj_Asteroids
 	variable int LastBeltIndex
 	variable bool UsingBookMarks = FALSE
 	variable time BeltArrivalTime
-	variable float MaxDistanceToAsteroid
+
+	variable int LastSurveyScanResultCount = 0
+	variable time LastSurveyScanResultTime
 
 	method Initialize()
 	{
+		Event[EVENT_ONFRAME]:AttachAtom[This:Pulse]
+
+		Event[EVE_OnSurveyScanData]:AttachAtom[This:OnSurveyScanData]
+		LavishScript:RegisterEvent[EVEBot_ClaimAsteroid]
+
+		Event[EVEBot_ClaimAsteroid]:AttachAtom[This:OnEVEBot_ClaimAsteroid]
+
 		UI:UpdateConsole["obj_Asteroids: Initialized", LOG_MINOR]
 	}
 
+	method Shutdown()
+	{
+		Event[EVENT_ONFRAME]:DetachAtom[This:Pulse]
+		Event[EVE_OnSurveyScanData]:DetachAtom[This:OnSurveyScanData]
+		Event[EVEBot_ClaimAsteroid]:DetachAtom[This:OnEVEBot_ClaimAsteroid]
+	}
+
+	method Pulse()
+	{
+		if ${EVEBot.Paused}
+		{
+			return
+		}
+
+		if ${Time.Timestamp} >= ${This.NextPulse.Timestamp}
+		{
+			variable iterator ClaimedRoids
+			AsteroidList_Claimed:GetIterator[claimed]
+
+			; Prune asteroids from the list that have poofed
+			if ${ClaimedRoids:First(exists)}
+			do
+			{
+				if !${Entity[${ClaimedRoids.Value}](exists)}
+				{
+					AsteroidList_Claimed:Remove[${ClaimedRoids.Value}]
+				}
+			}
+			while ${ClaimedRoids:Next(exists)}
+
+
+			This.NextPulse:Set[${Time.Timestamp}]
+			This.NextPulse.Second:Inc[${This.PulseIntervalInSeconds}]
+			This.NextPulse:Update
+		}
+	}
+
+	method OnSurveyScanData(int ResultCount)
+	{
+		LastSurveyScanResultTime:Set[${Time.Timestamp}]
+		LastSurveyScanResultCount:Set[${ResultCount}]
+		UI:UpdateConsole["obj_Asteroids: Survey Scan data received for ${LastSurveyScanResultCount} asteroids", LOG_DEBUG]
+	}
+
+	method OnEVEBot_ClaimAsteroid(int64 ClaimerID, int64 AsteroidID)
+	{
+		if ${ClaimerID} != ${Me.ID}
+		{
+			AsteroidList_Claimed:Add[${AsteroidID}]
+		}
+	}
+
 	; Checks the belt name against the empty belt list.
-	member IsBeltEmpty(string BeltName)
+	member IsBeltMarkedEmpty(string BeltName)
 	{
 		if !${BeltName(exists)}
 		{
@@ -60,7 +113,7 @@ objectdef obj_Asteroids
 		{
 			if ${EmptyBelt.Value.Equal[${BeltName}]}
 			{
-				echo "DEBUG: obj_Asteroid:IsBeltEmpty - ${BeltName} - TRUE"
+				echo "DEBUG: obj_Asteroid:IsBeltMarkedEmpty - ${BeltName} - TRUE"
 				return TRUE
 			}
 		}
@@ -69,7 +122,7 @@ objectdef obj_Asteroids
 	}
 
 	; Adds the named belt to the empty belt list
-	method BeltIsEmpty(string BeltName)
+	method MarkBeltAsEmpty(string BeltName)
 	{
 		if ${BeltName(exists)}
 		{
@@ -78,6 +131,7 @@ objectdef obj_Asteroids
 		}
 	}
 
+	; TODO - remove this from here -- move to obj_Belts - CT
 	function MoveToRandomBeltBookMark(bool FleetWarp=FALSE)
 	{
 		variable int RandomBelt
@@ -132,10 +186,12 @@ objectdef obj_Asteroids
 			}
 			break
 		}
+
 		if ${BeltBookMarkList.Used}
 		{
 			UI:UpdateConsole["Debug: WarpToBookMarkName to ${BeltBookMarkList[${RandomBelt}].Label} from MoveToRandomBeltBookMark Line _LINE_ ", LOG_DEBUG]
 			call Ship.WarpToBookMark ${BeltBookMarkList[${RandomBelt}].ID} ${FleetWarp}
+			Ship:Activate_SurveyScanner
 
 			This.BeltArrivalTime:Set[${Time.Timestamp}]
 			This.LastBookMarkIndex:Set[${RandomBelt}]
@@ -148,7 +204,108 @@ objectdef obj_Asteroids
 		return
 	}
 
-	function MoveToField(bool ForceMove, bool IgnoreTargeting=FALSE, bool FleetWarp=FALSE)
+	; Pick the nearest appropriate asteroid from AsteroidList; checking claimed list and ranges.
+	; If MaxDistance is 0, use natural targetng/laser range and check distance to existing roids
+	; If MaxDistance is > 0, use only MaxDistance, and not the above -- intended to pick a roid to which to slowboat
+	member:int64 NearestAsteroid(int64 MaxDistance=0, bool IgnoreClaimedStatus=FALSE)
+	{
+		variable iterator AsteroidIterator
+
+		AsteroidList:GetIterator[AsteroidIterator]
+		if !${AsteroidIterator:First(exists)}
+		{
+			UI:UpdateConsole["DEBUG: obj_Asteroids:NearestAsteroid: Asteroid List empty", LOG_DEBUG]
+			return -1
+		}
+
+		if ${MaxDistance} == 0
+		{
+			MaxDistance:Set[${Ship.OptimalMiningRange}]
+		}
+
+		; Iterate thru the asteroid list, and find the first one that isn't excluded for obvious reasons.
+		; Yes, this could be one giant if statement. It was harder to follow, with the bool inversions etc.
+		do
+		{
+			if !${Entity[${AsteroidIterator.Value.ID}](exists)}
+			{
+				UI:UpdateConsole["DEBUG: obj_Asteroids:NearestAsteroid: Skipping ${AsteroidIterator.Value.ID} (Entity)", LOG_DEBUG]
+				continue
+			}
+			if !${IgnoreClaimedStatus} && ${AsteroidList_Claimed.Contains[${AsteroidIterator.Value.ID}]}
+			{
+				; Someone else claimed it first. Oh, the vogonity!
+				UI:UpdateConsole["DEBUG: obj_Asteroids:NearestAsteroid: Skipping ${AsteroidIterator.Value.ID} (Claimed)", LOG_DEBUG]
+				continue
+			}
+			if ${AsteroidIterator.Value.IsLockedTarget} || ${AsteroidIterator.Value.BeingTargeted}
+			{
+				UI:UpdateConsole["DEBUG: obj_Asteroids:NearestAsteroid: Skipping ${AsteroidIterator.Value.ID} (locked/beinglocked)", LOG_DEBUG]
+				continue
+			}
+			; Now check regular distance
+			if ${AsteroidIterator.Value.Distance} >= ${MaxDistance}
+			{
+				UI:UpdateConsole["DEBUG: obj_Asteroids:NearestAsteroid: Skipping ${AsteroidIterator.Value.ID} (Distance > ${MaxDistance})", LOG_DEBUG]
+				continue
+			}
+
+			; Check to see if we need to exclude this based on distance to ALL currently locked asteroids
+			; If the candidate roid isn't within 75% of our mining range to all locked roids, skip it
+			; A 14.5km Me 14.5km B
+			; A <> B 29km
+			variable index:entity MyTargets
+			variable iterator MyTarget
+			Me:GetTargets[MyTargets]
+			MyTargets:GetIterator[MyTarget]
+			variable bool AbortLoop = FALSE
+			variable float MaxDistFromTarget
+			MaxDistFromTarget:Set[${Math.Calc[${Ship.OptimalMiningRange} * 0.75]}]
+			if ${MyTarget:First(exists)}
+			{
+				do
+				{
+					if ${AsteroidIterator.Value.DistanceTo[${MyTarget.Value.ID}]} > ${MaxDistFromTarget}
+					{
+						; We have a locked asteroid that's too far from this one;  No, this is not perfect because we don't know our position
+						UI:UpdateConsole["DEBUG: obj_Asteroids:NearestAsteroid: Skipping ${AsteroidIterator.Value.ID} (Distance from target ${MyTarget.Value.ID} > ${MaxDistFromTarget})", LOG_DEBUG]
+						AbortLoop:Set[TRUE]
+						break
+					}
+				}
+				while ${MyTarget:Next(exists)}
+				if ${AbortLoop}
+				{
+					continue
+				}
+			}
+
+			; Otherwise, we've reached a potential asteroid we can use.
+			break
+		}
+		while ${AsteroidIterator:Next(exists)}
+
+		if ${AsteroidIterator.Value(exists)} && ${Entity[${AsteroidIterator.Value.ID}](exists)}
+		{
+			return ${AsteroidIterator.Value.ID}
+		}
+
+		return -1
+	}
+
+	member:int64 MaxTravelDistanceToAsteroid()
+	{
+		if ${Ship.OptimalMiningRange} == 0 && ${Config.Miner.OrcaMode}
+		{
+			return ${Math.Calc[20000 * ${Config.Miner.MiningRangeMultipler}]}
+		}
+		else
+		{
+			return ${Math.Calc[${Ship.OptimalMiningRange} * ${Config.Miner.MiningRangeMultipler}]}
+		}
+	}
+
+	function MoveToField(bool ForceMove, bool DoNotLockTarget=FALSE, bool FleetWarp=FALSE)
 	{
 		variable int curBelt
 		variable index:entity Belts
@@ -157,96 +314,48 @@ objectdef obj_Asteroids
 		variable string beltsubstring
 		variable bool AsteroidsInRange = FALSE
 
+		if !${ForceMove}
+		{
+			if ${This.NearestAsteroid[${This.MaxTravelDistanceToAsteroid}]} == -1
+			{
+				UI:UpdateConsole["ERROR: OBJ_Asteroids:MoveToField: Belt is not empty and ForceMove not set, staying at Asteroid Belt: ${BeltIterator.Value.Name}", LOG_CRITICAL]
+				return
+			}
+		}
+
+		; Using Last Position Bookmarks? Warp to and return
+		if (${Config.Miner.BookMarkLastPosition} && ${Bookmarks.StoredLocationExists})
+		{
+			/* We have a stored location, we should return to it. */
+			UI:UpdateConsole["Returning to last location (${Bookmarks.StoredLocation})"]
+			call Ship.TravelToSystem ${EVE.Bookmark[${Bookmarks.StoredLocation}].SolarSystemID}
+			call Ship.WarpToBookMarkName "${Bookmarks.StoredLocation}" ${FleetWarp}
+			Ship:Activate_SurveyScanner
+
+			This.BeltArrivalTime:Set[${Time.Timestamp}]
+			Bookmarks:RemoveStoredLocation
+			return
+		}
+
+		; Using Asteroid Field Bookmarks? Warp to and return
+		if ${Config.Miner.UseFieldBookmarks}
+		{
+			call This.MoveToRandomBeltBookMark ${FleetWarp}
+			return
+		}
+
+		; Bookmarks aren't being used; check for belts in entity list
+		beltsubstring:Set["ASTEROID BELT"]
 		if ${Config.Miner.IceMining}
 		{
 			beltsubstring:Set["ICE FIELD"]
 		}
-		else
-		{
-			beltsubstring:Set["ASTEROID BELT"]
-		}
 
-		EVE:QueryEntities[Belts, "GroupID = GROUP_ASTEROIDBELT"]
+		EVE:QueryEntities[Belts, "GroupID = GROUP_ASTEROIDBELT && Name =- \"${beltsubstring}\""]
 		Belts:GetIterator[BeltIterator]
-		if ${BeltIterator:First(exists)}
+		if !${BeltIterator:First(exists)}
 		{
-			if !${ForceMove}
-			{
-				call TargetNext TRUE ${IgnoreTargeting}
-				AsteroidsInRange:Set[${Return}]
-			}
-
-			if ${ForceMove} || !${AsteroidsInRange}
-			{
-				if (${Config.Miner.BookMarkLastPosition} && \
-					${Bookmarks.StoredLocationExists})
-				{
-					/* We have a stored location, we should return to it. */
-					UI:UpdateConsole["Returning to last location (${Bookmarks.StoredLocation})"]
-					call Ship.TravelToSystem ${EVE.Bookmark[${Bookmarks.StoredLocation}].SolarSystemID}
-					call Ship.WarpToBookMarkName "${Bookmarks.StoredLocation}" ${FleetWarp}
-					This.BeltArrivalTime:Set[${Time.Timestamp}]
-					Bookmarks:RemoveStoredLocation
-					return
-				}
-				if ${Config.Miner.UseFieldBookmarks}
-				{
-					call This.MoveToRandomBeltBookMark ${FleetWarp}
-					return
-				}
-
-				; We're not at a field already, so find one
-				do
-				{
-					curBelt:Set[${Math.Rand[${Belts.Used}]:Inc[1]}]
-					TryCount:Inc
-					if ${TryCount} > ${Math.Calc[${Belts.Used} * 10]}
-					{
-						UI:UpdateConsole["All belts empty!"]
-						call ChatIRC.Say "All belts empty!"
-						EVEBot.ReturnToStation:Set[TRUE]
-						return
-					}
-				}
-				while ( !${Belts[${curBelt}].Name.Find[${beltsubstring}](exists)} || \
-						${This.IsBeltEmpty[${Belts[${curBelt}].Name}]} )
-
-				UI:UpdateConsole["EVEBot thinks we're not at a belt.  Warping to Asteroid Belt: ${Belts[${curBelt}].Name}"]
-				call Ship.WarpToID ${Belts[${curBelt}].ID} 0 ${FleetWarp}
-				This.BeltArrivalTime:Set[${Time.Timestamp}]
-				This.UsingBookMarks:Set[TRUE]
-				This.LastBeltIndex:Set[${curBelt}]
-			}
-			else
-			{
-				;UI:UpdateConsole["Staying at Asteroid Belt: ${BeltIterator.Value.Name}"]
-			}
-		}
-		else
-		{
-			/* There is a corner case here, in the event the user is in a system with no overview-visible
-				bookmarks, but has Belt bookmarks to hidden belts. We duplicate this code here from above
-				to avoid yet another level of */
-
-			if (${Config.Miner.BookMarkLastPosition} && \
-				${Bookmarks.StoredLocationExists})
-			{
-				/* We have a stored location, we should return to it. */
-				UI:UpdateConsole["Returning to last location (${Bookmarks.StoredLocation})"]
-				call Ship.WarpToBookMarkName "${Bookmarks.StoredLocation}"
-				This.BeltArrivalTime:Set[${Time.Timestamp}]
-				Bookmarks:RemoveStoredLocation
-				return
-			}
-
-			if ${Config.Miner.UseFieldBookmarks}
-			{
-				call This.MoveToRandomBeltBookMark
-				return
-			}
-
-
-			UI:UpdateConsole["ERROR: OBJ_Asteroids:MoveToField: No asteroid belts in the area...", LOG_CRITICAL]
+			UI:UpdateConsole["ERROR: OBJ_Asteroids:MoveToField: No asteroid belts or belt bookmarks found...", LOG_CRITICAL]
 			#if EVEBOT_DEBUG
 			UI:UpdateConsole["OBJ_Asteroids:MoveToField: Total Entities: ${EVE.EntitiesCount}", LOG_DEBUG]
 			UI:UpdateConsole["OBJ_Asteroids:MoveToField: Size of Belts List ${Belts.Used}", LOG_DEBUG]
@@ -254,126 +363,85 @@ objectdef obj_Asteroids
 			EVEBot.ReturnToStation:Set[TRUE]
 			return
 		}
-	}
 
-	method Find_Best_Asteroids()
-	{
-		Config.Miner.OreTypesRef:GetSettingIterator[This.OreTypeIterator]
-
-		if ${This.OreTypeIterator:First(exists)}
+		; Belt list is populated, let's pick a belt
+		do
 		{
-			do
+			curBelt:Set[${Math.Rand[${Belts.Used}]:Inc[1]}]
+			TryCount:Inc
+			if ${TryCount} > ${Math.Calc[${Belts.Used} * 10]}
 			{
-				;echo "DEBUG: obj_Asteroids: Checking for Ore Type ${This.OreTypeIterator.Key}"
-				This.AsteroidList:Clear
-				EVE:QueryEntities[This.AsteroidList, "CategoryID = ${This.AsteroidCategoryID} && Name =- ${This.OreTypeIterator.Key}"]
-
-				This.AsteroidList:GetIterator[AsteroidIterator]
-				if ${AsteroidIterator:First(exists)}
-				do
-				{
-
-					This.BestAsteroidList:Insert[${AsteroidIterator.Value.ID}]
-				}
-				while ${This.Asteroidlist:Next(exists)}
-
-				;This.BestAsteroidList:Insert[${This.AsteroidList
-			}
-			while ( (${This.BestAsteroidList.Used} < 10) && (${This.OreTypeIterator:Next(exists)}) )
-
-			if ${This.AsteroidList.Used}
-			{
-					;echo "DEBUG: obj_Asteroids:UpdateList - Found ${This.AsteroidList.Used} ${This.OreTypeIterator.Key} asteroids"
+				UI:UpdateConsole["All belts marked empty, returning to station"]
+				call ChatIRC.Say "All belts marked empty!"
+				EVEBot.ReturnToStation:Set[TRUE]
+				return
 			}
 		}
-		else
-		{
-			echo "WARNING: obj_Asteroids: Ore Type list is empty, please check config"
-		}
+		while ( ${This.IsBeltMarkedEmpty[${Belts[${curBelt}].Name}]} )
 
+		UI:UpdateConsole["Warping to Asteroid Belt: ${Belts[${curBelt}].Name}"]
+		call Ship.WarpToID ${Belts[${curBelt}].ID} 0 ${FleetWarp}
+		Ship:Activate_SurveyScanner
+
+		This.BeltArrivalTime:Set[${Time.Timestamp}]
+		This.UsingBookMarks:Set[TRUE]
+		This.LastBeltIndex:Set[${curBelt}]
 
 	}
 
 	function UpdateList(int64 EntityIDForDistance=-1)
 	{
-		variable index:entity AsteroidListTmp
-		variable index:entity AsteroidList_OutOfRange
-		variable index:entity AsteroidList_OutOfRangeTmp
-		variable iterator AsteroidIt
+		variable iterator OreTypeIterator
 
-		if ${Ship.OptimalMiningRange} == 0 && ${Config.Miner.OrcaMode}
+		if ${Config.Miner.IceMining}
 		{
-			UI:UpdateConsole["BAD"]
-			This.MaxDistanceToAsteroid:Set[${Math.Calc[20000 * ${Config.Miner.MiningRangeMultipler}]}]
-		}
-		if ${Config.Miner.UseMiningDrones} && ${Ship.TotalMiningLasers} == 0
-		{
-			UI:UpdateConsole["GOOD"]
-			This.MaxDistanceToAsteroid:Set$[{Math.Calc[60000 * ${Config.Miner.MiningRangeMultipler}]}]
+			Config.Miner.IceTypesRef:GetSettingIterator[OreTypeIterator]
 		}
 		else
 		{
-			UI:UpdateConsole["MEDIOCRE"]
-			This.MaxDistanceToAsteroid:Set[${Math.Calc[${Ship.OptimalMiningRange} * ${Config.Miner.MiningRangeMultipler}]}]
+			Config.Miner.OreTypesRef:GetSettingIterator[OreTypeIterator]
 		}
 
-		if ${Config.Miner.IceMining} || ${Agents.isIceMining} == True
+		if ${OreTypeIterator:First(exists)}
 		{
-			Config.Miner.IceTypesRef:GetSettingIterator[This.OreTypeIterator]
-		}
-		else
-		{
-			Config.Miner.OreTypesRef:GetSettingIterator[This.OreTypeIterator]
-		}
+			variable index:entity AsteroidListTmp
+			variable index:entity AsteroidList_TotalIRTmp
+			variable index:entity AsteroidList_OutOfRange
+			variable index:entity AsteroidList_OutOfRangeTmp
+			variable iterator AsteroidIt
+			variable int Count_InRange
+			variable int Count_OOR
 
-		if ${This.OreTypeIterator:First(exists)}
-		{
 			This.AsteroidList:Clear
+; This is adding duplicates because the oretypes are treated as substrings
 			do
 			{
-				; This is intended to get the best ore in the system before others do.  Its not
+				variable string QueryStrPrefix
+				QueryStrPrefix:Set["CategoryID = ${This.AsteroidCategoryID} && Name =- \"${OreTypeIterator.Key}\""]
+				; This is intended to get the desired ore in the system before others do.  Its not
 				; intended to empty a given radius of asteroids
 				if ${Config.Miner.StripMine}
 				{
 					if ${EntityIDForDistance} < 0
 					{
-						EVE:QueryEntities[AsteroidListTmp, "CategoryID = ${This.AsteroidCategoryID} && Name =- \"${This.OreTypeIterator.Key}\" && Distance < ${Ship.OptimalMiningRange}"]
-						EVE:QueryEntities[AsteroidList_OutOfRangeTmp, "CategoryID = ${This.AsteroidCategoryID} && Name =- \"${This.OreTypeIterator.Key}\" && Distance >= ${Ship.OptimalMiningRange}"]
+						EVE:QueryEntities[AsteroidListTmp, "${QueryStrPrefix} && Distance < ${Ship.OptimalMiningRange}"]
+						EVE:QueryEntities[AsteroidList_OutOfRangeTmp, "${QueryStrPrefix} && Distance >= ${Ship.OptimalMiningRange} && Distance < ${This.MaxTravelDistanceToAsteroid}"]
 					}
 					else
 					{
-						EVE:QueryEntities[AsteroidListTmp, "CategoryID = ${This.AsteroidCategoryID} && Name =- \"${This.OreTypeIterator.Key}\" && DistanceTo[${EntityIDForDistance}] < ${Math.Calc[${Ship.OptimalMiningRange} + 2000]}"]
-						EVE:QueryEntities[AsteroidList_OutOfRangeTmp, "CategoryID = ${This.AsteroidCategoryID} && Name =- \"${This.OreTypeIterator.Key}\" && DistanceTo[${EntityIDForDistance}] >= ${Math.Calc[${Ship.OptimalMiningRange} + 2000]}"]
+						EVE:QueryEntities[AsteroidListTmp, "${QueryStrPrefix} && DistanceTo[${EntityIDForDistance}] < ${Math.Calc[${Ship.OptimalMiningRange} + 2000]}"]
+						EVE:QueryEntities[AsteroidList_OutOfRangeTmp, "${QueryStrPrefix} && DistanceTo[${EntityIDForDistance}] >= ${Math.Calc[${Ship.OptimalMiningRange} + 2000]} && DistanceTo[${EntityIDForDistance}] < ${This.MaxTravelDistanceToAsteroid}"]
 					}
 				}
 				else
 				{
-					EVE:QueryEntities[AsteroidListTmp, "CategoryID = ${This.AsteroidCategoryID} && Name =- \"${This.OreTypeIterator.Key}\""]
-				
-					;EVE:QueryEntities[AsteroidListTmp, "CategoryID = ${This.AsteroidCategoryID} && Name =- \"${This.OreTypeIterator.Key}\" && DistanceTo[${EntityIDForDistance}] < ${Math.Calc[${Ship.OptimalMiningRange} + 2000]}"]
-					
+					EVE:QueryEntities[AsteroidListTmp, "${QueryStrPrefix} && Distance < ${This.MaxTravelDistanceToAsteroid}"]
 				}
 
-				variable int Count
-				variable int Max
-				; Randomize the first 15 in-range asteroids in the list so that all the miners don't glom on the same one.
-				
-				;AsteroidListTmp:RemoveByQuery[${LavishScript.CreateQuery["DistanceTo[${EntityIDForDistance}] >= 5"]
-				if !${Config.Miner.IceMining} && ${AsteroidListTmp.Used} > 3
-				{
-					Max:Set[${AsteroidListTmp.Used}]
-					if ${Max} > 15
-					{
-						Max:Set[15]
-					}
-					for (Count:Set[0] ; ${Count} < ${Max} ; Count:Inc)
-					{
-						AsteroidListTmp:Swap[${Math.Rand[${Max}]:Inc},${Math.Rand[${Max}]:Inc}]
-					}
-				}
+				Count_InRange:Inc[${AsteroidListTmp.Used}]
+				Count_OOR:Inc[${AsteroidList_OutOfRangeTmp.Used}]
+
 				; Append the in-range asteroids of the current ore type to the final list
-				AsteroidListTmp:RemoveByQuery[${LavishScript.CreateQuery["DistanceTo[${MyShip.ID}] >= 60000"]}]
-				AsteroidListTmp:Collapse
 				AsteroidListTmp:GetIterator[AsteroidIt]
 				if ${AsteroidIt:First(exists)}
 				{
@@ -383,21 +451,7 @@ objectdef obj_Asteroids
 					}
 					while ${AsteroidIt:Next(exists)}
 				}
-				
-				UI:UpdateConsole["OBJ_Asteroids:UpdateList: ${AsteroidList.Used} (In Range: ${AsteroidListTmp.Used} OOR: ${AsteroidList_OutOfRangeTmp.Used}) asteroids found", LOG_DEBUG]
-				; Randomize the first 10 out of range asteroids in the list so that all the miners don't glom on the same one.
-				if !${Config.Miner.IceMining} && ${AsteroidList_OutOfRangeTmp.Used} > 3
-				{
-					Max:Set[${AsteroidList_OutOfRangeTmp.Used}]
-					if ${Max} > 10
-					{
-						Max:Set[10]
-					}
-					for (Count:Set[0] ; ${Count} < ${Max} ; Count:Inc)
-					{
-						AsteroidList_OutOfRangeTmp:Swap[${Math.Rand[${Max}]:Inc},${Math.Rand[${Max}]:Inc}]
-					}
-				}
+
 				; Append the asteroids of the current ore type to the out of range tmp list; later we'll append it to the fully populated in-range list
 				AsteroidList_OutOfRangeTmp:GetIterator[AsteroidIt]
 				if ${AsteroidIt:First(exists)}
@@ -410,7 +464,24 @@ objectdef obj_Asteroids
 				}
 
 			}
-			while ${This.OreTypeIterator:Next(exists)}
+			while ${OreTypeIterator:Next(exists)}
+
+			; Get the unfiltered asteroid counts in range
+			if ${Config.Miner.StripMine}
+			{
+				if ${EntityIDForDistance} < 0
+				{
+					EVE:QueryEntities[AsteroidList_TotalIRTmp, "CategoryID = ${This.AsteroidCategoryID} && Distance < ${Ship.OptimalMiningRange}"]
+				}
+				else
+				{
+					EVE:QueryEntities[AsteroidList_TotalIRTmp, "CategoryID = ${This.AsteroidCategoryID} && DistanceTo[${EntityIDForDistance}] < ${Math.Calc[${Ship.OptimalMiningRange} + 2000]}"]
+				}
+			}
+			else
+			{
+				EVE:QueryEntities[AsteroidList_TotalIRTmp, "CategoryID = ${This.AsteroidCategoryID} && Distance < ${This.MaxTravelDistanceToAsteroid}"]
+			}
 
 			if ${Config.Miner.StripMine}
 			{
@@ -426,7 +497,7 @@ objectdef obj_Asteroids
 				}
 			}
 
-			UI:UpdateConsole["OBJ_Asteroids:UpdateList: ${AsteroidList.Used} (In Range: ${AsteroidListTmp.Used} OOR: ${AsteroidList_OutOfRangeTmp.Used}) asteroids found", LOG_DEBUG]
+			UI:UpdateConsole["obj_Asteroids:UpdateList: ${AsteroidList.Used} In Range: ${Count_InRange} OOR: ${Count_OOR} Unfiltered In Range: ${AsteroidList_TotalIRTmp.Used} asteroids found", LOG_DEBUG]
 		}
 		else
 		{
@@ -434,42 +505,28 @@ objectdef obj_Asteroids
 		}
 	}
 
-	member:int64 NearestAsteroid()
-	{
-		; TODO - add a Mercoxit checkbox to ui, and pass the config val as a param to this member for whether to include merc or not.
-		return ${Entity["CategoryID = ${This.AsteroidCategoryID} && TypeID != 11396"].ID}
-	}
-
-
-	method NextAsteroid()
-	{
-		AsteroidList:GetSettingIterator
-	}
-
+	; FieldEmpty returning TRUE should trigger a belt change.
 	member:bool FieldEmpty()
 	{
-		variable iterator AsteroidIterator
-		if ${AsteroidList.Used} == 0
+		if ${AsteroidList.Used} == 0 || !${Entity[${AsteroidList.Get[1].ID}](exists)}
 		{
 			call This.UpdateList
 		}
 
-		This.AsteroidList:GetIterator[AsteroidIterator]
-		if ${AsteroidIterator:First(exists)}
+		if ${AsteroidList.Used} == 0
 		{
-			return FALSE
+			return TRUE
 		}
-		return TRUE
+		return FALSE
 	}
 
-	
 	function:bool TargetNextInRange(int64 DistanceToTarget=-1)
 	{
 		variable iterator AsteroidIterator
 
-		if ${AsteroidList.Used} == 0
+		if ${This.FieldEmpty}
 		{
-			call This.UpdateList
+			return FALSE
 		}
 
 		This.AsteroidList:GetIterator[AsteroidIterator]
@@ -477,9 +534,14 @@ objectdef obj_Asteroids
 		{
 			do
 			{
+				if ${AsteroidList_Claimed.Contains[${AsteroidIterator.Value.ID}]}
+				{
+					; Someone else claimed it first. Oh, the vogonity!
+					continue
+				}
+
 				if ${DistanceToTarget} == -1
 				{
-					
 					if ${Entity[${AsteroidIterator.Value.ID}](exists)} && \
 						!${AsteroidIterator.Value.IsLockedTarget} && \
 						!${AsteroidIterator.Value.BeingTargeted} && \
@@ -506,11 +568,10 @@ objectdef obj_Asteroids
 							{
 								if ${AsteroidIterator.Value.CategoryID} == ${Asteroids.AsteroidCategoryID}
 								{
-									
-										if ${AsteroidIterator.Value.DistanceTo[${Target.Value.ID}]} > 30000
-										{
-											IsWithinRangeOfOthers:Set[FALSE]
-										}
+									if ${AsteroidIterator.Value.DistanceTo[${Target.Value.ID}]} > ${Math.Calc[${Ship.OptimalMiningRange} * 2]}
+									{
+										IsWithinRangeOfOthers:Set[FALSE]
+									}
 								}
 							}
 							while ${Target:Next(exists)}
@@ -523,226 +584,92 @@ objectdef obj_Asteroids
 
 			if ${AsteroidIterator.Value(exists)} && ${Entity[${AsteroidIterator.Value.ID}](exists)}
 			{
-				if ${AsteroidIterator.Value.IsLockedTarget} || \
-					${AsteroidIterator.Value.BeingTargeted}
+				if ${AsteroidIterator.Value.IsLockedTarget} || ${AsteroidIterator.Value.BeingTargeted}
 				{
 					return TRUE
 				}
 
+				relay all "Event[EVEBot_ClaimAsteroid]:Execute[${Me.ID}, ${AsteroidIterator.Value.ID}]"
 				UI:UpdateConsole["Locking Asteroid ${AsteroidIterator.Value.Name}: ${EVEBot.MetersToKM_Str[${AsteroidIterator.Value.Distance}]}"]
 				AsteroidIterator.Value:LockTarget
+				Ship:Activate_SurveyScanner
 
-				call This.UpdateList
 				return TRUE
 			}
-			else
-			{
-				call This.UpdateList
-				return FALSE
-			}
 		}
+
 		return FALSE
 	}
 
-	function:bool TargetNext(bool CalledFromMoveRoutine=FALSE, bool IgnoreTargeting=FALSE)
+	; Return FALSE if we weren't able to target a new asteroid
+	; Return TRUE if we targeted a new asteroid
+	; Does not move, except to approach asteroids
+	function:bool TargetNext(bool CalledFromMoveRoutine=FALSE, bool DoNotLockTarget=FALSE)
 	{
-		variable iterator AsteroidIterator
+		variable int64 TargetAsteroid
 
-		if ${AsteroidList.Used} == 0
-		{
-			call This.UpdateList
-		}
-
-		This.AsteroidList:GetIterator[AsteroidIterator]
-		if ${AsteroidIterator:First(exists)}
-		{
-			do
-			{
-				if ${Entity[${AsteroidIterator.Value.ID}](exists)} && \
-					!${AsteroidIterator.Value.IsLockedTarget} && \
-					!${AsteroidIterator.Value.BeingTargeted} && \
-					${AsteroidIterator.Value.Distance} < ${MyShip.MaxTargetRange} && \
-					( !${Me.ActiveTarget(exists)} || ${AsteroidIterator.Value.DistanceTo[${Me.ActiveTarget.ID}]} <= 25000 )
-				{
-					break
-				}
-			}
-			while ${AsteroidIterator:Next(exists)}
-
-			if ${AsteroidIterator.Value(exists)} && \
-				${Entity[${AsteroidIterator.Value.ID}](exists)}
-			{
-				if ${AsteroidIterator.Value.IsLockedTarget} || \
-					${AsteroidIterator.Value.BeingTargeted}
-				{
-					return TRUE
-				}
-
-				;; This member does not exist in obj_Combat!!  -- GP
-				;;while ${Combat.CombatPause}
-				;;{
-				;;	wait 30
-				;;	echo "DEBUG: Obj_Asteroids In Combat Pause Loop"
-				;;}
-
-				if !${IgnoreTargeting}
-				{
-					UI:UpdateConsole["Locking Asteroid ${AsteroidIterator.Value.Name}: ${EVEBot.MetersToKM_Str[${AsteroidIterator.Value.Distance}]}"]
-					AsteroidIterator.Value:LockTarget
-					do
-					{
-					  wait 30
-					}
-					while ${Me.TargetingCount} > 0
-				}
-
-				call This.UpdateList
-				return TRUE
-			}
-			else
-			{
-				call This.UpdateList
-				if ${Ship.TotalActivatedMiningLasers} == 0
-				{
-					if ${Ship.CargoFull}
-					{
-						return FALSE
-					}
-					This.AsteroidList:GetIterator[AsteroidIterator]
-					if ${AsteroidIterator:First(exists)}
-					{
-						if ${AsteroidIterator.Value.Distance} < ${This.MaxDistanceToAsteroid}
-						{
-							UI:UpdateConsole["obj_Asteroids: TargetNext: No Asteroids in range & All lasers idle: Approaching nearest"]
-							if ${MyShip.MaxTargetRange} < ${Ship.OptimalMiningRange} || ${Config.Miner.UseMiningDrones} && ${Ship.TotalMiningLasers} == 0
-							{
-								call Ship.Approach ${AsteroidIterator.Value.ID} 1000
-							}
-							else
-							{
-								call Ship.Approach ${AsteroidIterator.Value.ID} ${Math.Calc[${Ship.OptimalMiningRange} - 5000]}
-							}
-						}
-						else
-						{
-							UI:UpdateConsole["obj_Asteroids: TargetNext: No Asteroids within ${EVEBot.MetersToKM_Str[${This.MaxDistanceToAsteroid}]}, changing fields."]
-							/* The nearest asteroid is farfar away.  Let's just warp out. */
-
-							if ${CalledFromMoveRoutine}
-							{
-								; Don't do any movement, we're being called from inside another movement function
-								return FALSE
-							}
-							call This.MoveToField TRUE
-							return TRUE
-						}
-					}
-				}
-				return FALSE
-			}
-		}
-		else
+		if ${This.FieldEmpty}
 		{
 			UI:UpdateConsole["obj_Asteroids: No Asteroids within overview range"]
 			if ${Entity["GroupID = GROUP_ASTEROIDBELT"].Distance} < CONFIG_OVERVIEW_RANGE
 			{
-				This:BeltIsEmpty["${Entity[GroupID = GROUP_ASTEROIDBELT].Name}"]
+				This:MarkBeltAsEmpty["${Entity[GroupID = GROUP_ASTEROIDBELT].Name}"]
 			}
-			if ${CalledFromMoveRoutine}
-			{
-				; Don't do any movement, we're being called from inside another movement function
-				return FALSE
-			}
-			call This.MoveToField TRUE
-			return TRUE
-		}
-		return FALSE
-	}
-
-	function:bool MissionTargetNext(bool CalledFromMoveRoutine=FALSE, bool IgnoreTargeting=FALSE)
-	{
-		variable iterator AsteroidIterator
-
-		if ${AsteroidList.Used} == 0
-		{
-			call This.UpdateList
+			return FALSE
 		}
 
-		This.AsteroidList:GetIterator[AsteroidIterator]
-		if ${AsteroidIterator:First(exists)}
+		TargetAsteroid:Set[${This.NearestAsteroid[]}]
+		if ${TargetAsteroid} == -1 && ${AsteroidList_Claimed.Used} > 0
 		{
+			; Call again, ignoring claimed status. We'll all double up and get out of here faster
+			TargetAsteroid:Set[${This.NearestAsteroid[0, TRUE]}]
+		}
+		
+		if ${TargetAsteroid} != -1
+		{
+			UI:UpdateConsole["Locking Asteroid ${TargetAsteroid}:${Entity[${TargetAsteroid}].Name}: ${EVEBot.MetersToKM_Str[${Entity[${TargetAsteroid}].Distance}]}"]
+			relay all "Event[EVEBot_ClaimAsteroid]:Execute[${Me.ID}, ${Entity[${TargetAsteroid}].ID}]"
+			Ship:Activate_SurveyScanner
+			Entity[${TargetAsteroid}]:LockTarget
 			do
 			{
-				if ${Entity[${AsteroidIterator.Value.ID}](exists)} && \
-					!${AsteroidIterator.Value.IsLockedTarget} && \
-					!${AsteroidIterator.Value.BeingTargeted} && \
-					${AsteroidIterator.Value.Distance} < ${MyShip.MaxTargetRange} && \
-					( !${Me.ActiveTarget(exists)} || ${AsteroidIterator.Value.DistanceTo[${Me.ActiveTarget.ID}]} <= 55000 )
-				{
-					break
-				}
+			  wait 30
 			}
-			while ${AsteroidIterator:Next(exists)}
-
-			if ${AsteroidIterator.Value(exists)} && \
-				${Entity[${AsteroidIterator.Value.ID}](exists)}
-			{
-				if ${AsteroidIterator.Value.IsLockedTarget} || \
-					${AsteroidIterator.Value.BeingTargeted}
-				{
-					return TRUE
-				}
-
-			}
-				if !${IgnoreTargeting}
-				{
-					if ${AsteroidIterator.Value.Distance} >= 50000 && ${Entity[${AsteroidIterator.Value.ID}](exists)}
-					{
-					call Ship.Approach ${AsteroidIterator.Value.ID} 25000
-					}
-					UI:UpdateConsole["Locking Asteroid ${AsteroidIterator.Value.Name}: ${EVEBot.MetersToKM_Str[${AsteroidIterator.Value.Distance}]}"]
-					AsteroidIterator.Value:LockTarget
-					do
-					{
-					  wait 30
-					}
-					while ${Me.TargetingCount} > 0
-				}
-			else
-			{
-				call This.UpdateList
-				if ${Ship.TotalActivatedMiningLasers} == 0
-				{
-					if ${Ship.CargoFull}
-					{
-						return TRUE
-					}
-					This.AsteroidList:GetIterator[AsteroidIterator]
-					if ${AsteroidIterator:First(exists)}
-					{
-						if ${AsteroidIterator.Value.Distance} < ${This.MaxDistanceToAsteroid}
-						{
-							UI:UpdateConsole["obj_Asteroids: TargetNext: No Asteroids in range & All lasers idle: Approaching nearest"]
-							if ${MyShip.MaxTargetRange} < ${Ship.OptimalMiningRange} || ${Config.Miner.UseMiningDrones} && ${Ship.TotalMiningLasers} == 0
-							{
-								call Ship.Approach ${AsteroidIterator.Value.ID} 20000
-							}
-							else
-							{
-								call Ship.Approach ${AsteroidIterator.Value.ID} ${Math.Calc[${Ship.OptimalMiningRange} - 5000]}
-							}
-						}
-						else
-						{
-							return FALSE
-						}
-					}
-				}
-				return FALSE
-			}
+			while ${Me.TargetingCount} > 0
+			return TRUE
 		}
+
+		if ${Miner.Approaching} != 0
+		{
+			UI:UpdateConsole["obj_Asteroids: TargetNext: No unlocked asteroids in range right now, but Miner is approaching ${Miner.Approaching}:${Entity[${Miner.Approaching}].Name}.", LOG_DEBUG]
+			return TRUE
+		}
+
+		; If we're here
+		;  1) There were no unlocked asteroids inside stationary range, so we need to slowboat or warp
+		;  2) We may have locked asteroids that we're already mining; we don't want to move out of range
+		; Return FALSE so that Miner concentrates fire on remaining targets
+		if ${Ship.TotalActivatedMiningLasers} > 0
+		{
+			return FALSE
+		}
+
+		; Ok, there was nothing in range, we've got no lasers going.
+		; Check for asteroids within sloatboat range range
+		TargetAsteroid:Set[${This.NearestAsteroid[${This.MaxTravelDistanceToAsteroid}]}]
+		if ${TargetAsteroid} != -1
+		{
+			UI:UpdateConsole["obj_Asteroids: TargetNext: No unlocked asteroids in range & All lasers idle: Approaching ${TargetAsteroid}:${Entity[${TargetAsteroid}].Name}: ${EVEBot.MetersToKM_Str[${Entity[${TargetAsteroid}].Distance}]}"]
+			Miner:StartApproaching[${TargetAsteroid}]
+			return TRUE
+		}
+
+		UI:UpdateConsole["obj_Asteroids: TargetNext: No Asteroids within ${EVEBot.MetersToKM_Str[${This.MaxTravelDistanceToAsteroid}]}"]
+		; Clear the asteroid list. We've been thru it entirely and picked nothing. Force an update.
+		This.AsteroidList:Clear
 		return FALSE
 	}
+
 	member:int LockedAndLocking()
 	{
 		variable iterator Target

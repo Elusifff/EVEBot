@@ -1082,10 +1082,6 @@ objectdef obj_Ship
 			return 0
 		}
 
-		;if ${Config.Miner.UseMiningDrones} && ${Ship.TotalMiningLasers} == 0
-		;{
-		;	return 60000
-		;}
 		variable iterator ModuleIter
 
 		This.ModuleList_MiningLaser:GetIterator[ModuleIter]
