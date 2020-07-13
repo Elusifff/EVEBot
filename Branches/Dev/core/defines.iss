@@ -9,18 +9,16 @@
 
 variable string APP_NAME = "EVEBot"
 variable string APP_PATH = "EVEBot/EVEBot.iss"
-variable string SVN_REVISION = "$Rev$"
-variable string APP_HEADURL = "$HeadURL: https://www.isxgames.com/EVEBot/Trunk/EVEbot/core/defines.iss $"
+variable string APP_HEADURL = ""
 
-variable string APP_MANIFEST = "https://www.isxgames.com/EVEBot/Trunk/EVEbot/manifest.xml"
-variable string APP_MANIFEST_TRUNK = "https://www.isxgames.com/EVEBot/Trunk/EVEbot/manifest-trunk.xml"
-
-variable string AppVersion = "${APP_NAME} Version ${SVN_REVISION.Token[2, " "]}"
-variable int VersionNum = ${SVN_REVISION.Token[2, " "]}
+; Shown on UI
+variable string AppVersion = "0"
+variable int VersionNum = 0
 
 #define EVEBOT_DEBUG 1
 #define EVEBOT_DEBUG_TIMING 0
 #define EVEBOT_PROFILING 0
+#define DEBUG_ENTITIES 0
 
 ; If you want to debug specific modules or classes, place the class name here.
 ; Provided the class is using the proper ${LogPrefix} standard, it will be filtered appropriately -- CyberTech
@@ -146,6 +144,7 @@ variable int VersionNum = ${SVN_REVISION.Token[2, " "]}
 #define FLEETBOOSTERSQUAD 3
 
 #define GROUP_GANGLINK 316
+#define GROUP_COMMAND_BURST 1770
 #define GROUP_ACCELERATIONGATEKEYS 474
 #define GROUP_AGENTSINSPACE 517
 #define GROUP_ALLIANCE 32

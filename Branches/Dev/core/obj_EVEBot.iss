@@ -9,8 +9,6 @@
 
 objectdef obj_EVEBot inherits obj_BaseClass
 {
-	variable string SVN_REVISION = "$Rev$"
-
 	variable bool ReturnToStation = FALSE
 	variable bool _Paused = FALSE
 	variable bool Disabled = FALSE			/* If true, ALL functionality should be disabled  - everything. no pulses, no nothing */
@@ -168,7 +166,7 @@ objectdef obj_EVEBot inherits obj_BaseClass
 			return ${This.LastSessionResult}
 		}
 
-		if ${Me.InSpace} || ${Me.InStation}
+		if ${ISXEVE.IsSafe} && (${Me.InSpace} || ${Me.InStation})
 		{
 			This.LastSessionFrame:Set[${Script.RunningTime}]
 			This.LastSessionResult:Set[TRUE]
@@ -217,15 +215,15 @@ objectdef obj_EVEBot inherits obj_BaseClass
 		{
 			tmpstr:Set[" - Debugging (Objects: DEBUG_TARGET)"]
 		}
-
-		if ${APP_HEADURL.Find["EVEBot/branches/stable"]}
-		{
-			AppVersion:Set["${APP_NAME} Stable Revision ${VersionNum}${tmpstr}"]
-		}
-		else
-		{
-			AppVersion:Set["${APP_NAME} Dev Revision ${VersionNum}${tmpstr}"]
-		}
+		AppVersion:Set["${APP_NAME} Dev Revision${tmpstr}"]
+		;if ${APP_HEADURL.Find["EVEBot/branches/stable"]}
+		;{
+		;	AppVersion:Set["${APP_NAME} Stable Revision ${VersionNum}${tmpstr}"]
+		;}
+		;else
+		;{
+		;	AppVersion:Set["${APP_NAME} Dev Revision ${VersionNum}${tmpstr}"]
+		;}
 	}
 
 	member:int GameHour()

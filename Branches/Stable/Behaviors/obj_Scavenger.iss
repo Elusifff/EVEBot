@@ -15,9 +15,6 @@
  */
 objectdef obj_Scavenger
 {
-	variable string SVN_REVISION = "$Rev$"
-	variable int Version
-
 	/* the bot logic is currently based on a state machine */
 	variable string CurrentState
 	variable bool bHaveCargo = FALSE
@@ -340,7 +337,7 @@ objectdef obj_Scavenger
 				This.Wrecks:GetIterator[Wreck]
 				if !${Wreck:First(exists)}
 				{
-					UI:UpdateConsole["obj_Scavenger: TargetNext: No Wrecks within ${EVEBot.MetersToKM_Str[${This.MaxDistanceToAsteroid}], Going Home"]
+					UI:UpdateConsole["obj_Scavenger: TargetNext: No Wrecks on-grid, Going Home"]
 					call This.Flee
 				}
 			}

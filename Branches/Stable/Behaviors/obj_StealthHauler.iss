@@ -17,9 +17,6 @@
  
 objectdef obj_StealthHauler
 {
-	variable string SVN_REVISION = "$Rev$"
-	variable int Version
-
 	variable index:int apRoute
 	variable index:int apWaypoints
 	variable iterator  apIterator
@@ -68,22 +65,11 @@ objectdef obj_StealthHauler
 				{
 					variable index:entity sgIndex
 					variable iterator     sgIterator
-					EVE:QueryEntities[sgIndex, "GroupID = GROUP_STARGATE"]
+					EVE:QueryEntities[sgIndex, "GroupID = GROUP_STARGATE && Name = ${Universe[${apIterator.Value}].Name}"]
 					sgIndex:GetIterator[sgIterator]
 					if ${sgIterator:First(exists)}
 					{
-						do
-						{
-							variable string tmpString
-							tmpString:Set[${sgIterator.Value.Name.Token[2,"("]}]
-							tmpString:Set[${tmpString.Token[1,")"]}]
-							if ${tmpString.Equal[${Universe[${apIterator.Value}].Name}]}
-							{
-								break
-							}
-						}
-						while ${sgIterator:Next(exists)}
-						
+				
 						if ${sgIterator.Value(exists)}
 						{
 							UI:UpdateConsole["Setting speed to full throttle"]

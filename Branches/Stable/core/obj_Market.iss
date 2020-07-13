@@ -9,9 +9,6 @@
 
 objectdef obj_Market
 {
-	variable string SVN_REVISION = "$Rev$"
-	variable int Version
-
 	variable index:marketorder  sellOrders
 	variable index:marketorder  buyOrders
 	variable index:myorder      mySellOrders
@@ -35,9 +32,9 @@ objectdef obj_Market
 		This.sellOrders:Clear
 		This.buyOrders:Clear
 
-		EVE:FetchMarketOrders[${x}] 
-
-		;EVE:UpdateMarketOrders_B[${typeID}]
+		EVE:UpdateMarketOrders_A[${typeID}]
+		wait 40
+		EVE:UpdateMarketOrders_B[${typeID}]
 		wait 10
 		EVE:GetMarketOrders[This.sellOrders,${typeID}, "Sell"]
 		wait 10

@@ -192,7 +192,11 @@ objectdef obj_Agents
 	variable int RetryCount = 0
 	variable obj_AgentList AgentList
 	variable obj_MissionBlacklist MissionBlacklist
-
+	
+	variable bool isGasHarvesting = FALSE
+	variable bool isIceMining = FALSE
+	variable bool isOreMining = FALSE
+	
     method Initialize()
     {
     	if ${This.AgentList.agentIterator:First(exists)}
@@ -212,7 +216,7 @@ objectdef obj_Agents
 
 	member:int AgentIndex()
 	{
-		return ${Agent[${This.ActiveAgent}].Index}
+		return ${EVE.Agent[${This.ActiveAgent}].Index}
 	}
 
 	member:int AgentID()
@@ -232,7 +236,7 @@ objectdef obj_Agents
 		else
 		{
 			variable int agentIndex = 0
-			agentIndex:Set[${Agent[${name}].Index}]
+			agentIndex:Set[${EVE.Agent[${name}].Index}]
 		    if (${agentIndex} <= 0)
 		    {
 		        UI:UpdateConsole["obj_Agents: ERROR!  Cannot get Index for Agent ${name}.", LOG_CRITICAL]
@@ -243,7 +247,7 @@ objectdef obj_Agents
 				This.AgentName:Set[${name}]
 				UI:UpdateConsole["obj_Agents: Updating agent data for ${name} ${agentIndex}."]
 				Config.Agents:SetAgentIndex[${name},${agentIndex}]
-				Config.Agents:SetAgentID[${name},${Agent[${agentIndex}].ID}]
+				Config.Agents:SetAgentID[${name},${EVE.Agent[${agentIndex}].ID}]
 				Config.Agents:SetLastDecline[${name},0]
 			}
 		}
@@ -256,7 +260,7 @@ objectdef obj_Agents
 
 	member:bool InAgentStation()
 	{
-		return ${Station.DockedAtStation[${Agent[${This.AgentIndex}].StationID}]}
+		return ${Station.DockedAtStation[${EVE.Agent[${This.AgentIndex}].StationID}]}
 	}
 
 	member:string PickupStation()
@@ -334,50 +338,53 @@ objectdef obj_Agents
 				UI:UpdateConsole["obj_Agents: DEBUG: amIterator.Value.Type = ${amIterator.Value.Type}"]
 				if ${amIterator.Value.State} == 1
 				{
-					if ${MissionBlacklist.IsBlacklisted[${Agent[id,${amIterator.Value.AgentID}].Level},"${amIterator.Value.Name}"]} == FALSE
+					if ${MissionBlacklist.IsBlacklisted[${EVE.Agent[id,${amIterator.Value.AgentID}].Level},"${amIterator.Value.Name}"]} == FALSE
 					{
 						UI:UpdateConsole["HELL CIRCUS 2"]
 						variable bool isLowSec
 						variable bool avoidLowSec
-						variable bool isGasHarvesting
+						;variable bool isGasHarvesting
+						;variable bool isIceMining
 						isLowSec:Set[${Missions.MissionCache.LowSec[${amIterator.Value.AgentID}]}]
 						avoidLowSec:Set[${Config.Missioneer.AvoidLowSec}]
-						isGasHarvesting:Set[${Missions.MissionCache.GasHarvesting[${amIterator.Value.AgentID},${isGasHarvesting}]}]
+						;isGasHarvesting:Set[${Missions.MissionCache.GasHarvesting[${amIterator.Value.AgentID},${isGasHarvesting}]}]
+						;isIceMining:Set[${Missions.MissionCache.IceMining[${amIterator.Value.AgentID},${isIceMining}]}]
 						if ${avoidLowSec} == FALSE || (${avoidLowSec} == TRUE && ${isLowSec} == FALSE)
 						{
 							if ${amIterator.Value.Type.Find[Courier](exists)} && ${Config.Missioneer.RunCourierMissions} == TRUE
 							{
-								This:SetActiveAgent[${Agent[id,${amIterator.Value.AgentID}].Name}]
+								This:SetActiveAgent[${EVE.Agent[id,${amIterator.Value.AgentID}].Name}]
 								return
 							}
 
 							if ${amIterator.Value.Type.Find[Trade](exists)} && ${Config.Missioneer.RunTradeMissions} == TRUE
 							{
-								This:SetActiveAgent[${Agent[id,${amIterator.Value.AgentID}].Name}]
+								This:SetActiveAgent[${EVE.Agent[id,${amIterator.Value.AgentID}].Name}]
 								return
 							}
 
 							if ${amIterator.Value.Type.Find[Mining](exists)} && ${Config.Missioneer.RunMiningMissions} == TRUE && ${skipList.Contains[${Config.Agents.AgentID[${agentName}]}]} == FALSE
 							{
 								UI:UpdateConsole["HELL CIRCUS"]
-								This:SetActiveAgent[${Agent[id,${amIterator.Value.AgentID}].Name}]
+								This:SetActiveAgent[${EVE.Agent[id,${amIterator.Value.AgentID}].Name}]
 								return
 							}
 
 							if ${amIterator.Value.Type.Find[Encounter](exists)} && ${Config.Missioneer.RunKillMissions} == TRUE
 							{
-								UI:UpdateConsole["Setting ActiveAgent to ${Agent[id,${amIterator.Value.AgentID}].Name}", LOG_DEBUG]
-								This:SetActiveAgent[${Agent[id,${amIterator.Value.AgentID}].Name}]
+								UI:UpdateConsole["Setting ActiveAgent to ${EVE.Agent[id,${amIterator.Value.AgentID}].Name}", LOG_DEBUG]
+								This:SetActiveAgent[${EVE.Agent[id,${amIterator.Value.AgentID}].Name}]
 								return
 							}
 						}
 
 						/* if we get here the mission is not acceptable */
-						lastDecline:Set[${Config.Agents.LastDecline[${Agent[id,${amIterator.Value.AgentID}].Name}]}]
+						variable time lastDecline
+						lastDecline:Set[${Config.Agents.LastDecline[${EVE.Agent[id,${amIterator.Value.AgentID}].Name}]}]
 						UI:UpdateConsole["obj_Agents: DEBUG: lastDecline = ${lastDecline}"]
 						lastDecline.Hour:Inc[4]
 						lastDecline:Update
-						if ${lastDecline.Timestamp} >= ${Time.Timestamp}
+						if ${lastDecline.Timestamp} >= ${Time.Timestamp} && !${Config.Miner.IceMining}
 						{
 							UI:UpdateConsole["obj_Agents: DEBUG: Skipping mission to avoid standing loss: ${amIterator.Value.Name}"]
 							skipList:Add[${amIterator.Value.AgentID}]
@@ -387,12 +394,12 @@ objectdef obj_Agents
 					else
 					; ???
 					{
-					variable time lastDecline
+					;variable time lastDecline
 					lastDecline:Set[${Config.Agents.LastDecline[${Agent[id,${amIterator.Value.AgentID}].Name}]}]
 					UI:UpdateConsole["obj_Agents: DEBUG: lastDecline = ${lastDecline}"]
 					lastDecline.Hour:Inc[4]
 					lastDecline:Update
-					if ${lastDecline.Timestamp} >= ${Time.Timestamp}
+					if ${lastDecline.Timestamp} >= ${Time.Timestamp} && !${Config.Miner.IceMining}
 					{
 						UI:UpdateConsole["obj_Agents: DEBUG: Skipping mission to avoid standing loss: ${amIterator.Value.Name}"]
 						skipList:Add[${amIterator.Value.AgentID}]
@@ -518,13 +525,15 @@ objectdef obj_Agents
 			{
 				if ${amIterator.Value.State} > 1
 				{
-					if ${MissionBlacklist.IsBlacklisted[${Agent[id,${amIterator.Value.AgentID}].Level},"${amIterator.Value.Name}"]} == FALSE
+					if ${MissionBlacklist.IsBlacklisted[${EVE.Agent[id,${amIterator.Value.AgentID}].Level},"${amIterator.Value.Name}"]} == FALSE
 					{
 						variable bool isLowSec
-						variable bool avoidLowSec
-						variable bool isGasHarvesting
+						;variable bool avoidLowSec
+						;variable bool isGasHarvesting
+						;variable bool isIceMining
 						isLowSec:Set[${Missions.MissionCache.LowSec[${amIterator.Value.AgentID}]}]
-						isGasHarvesting:Set[${Missions.MissionCache.GasHarvesting[${amIterator.Value.AgentID},${isGasHarvesting}]}]
+						;isGasHarvesting:Set[${Missions.MissionCache.GasHarvesting[${amIterator.Value.AgentID},${isGasHarvesting}]}]
+						;isIceMining:Set[${Missions.MissionCache.IceMining[${amIterator.Value.AgentID},${isIceMining}]}]
 						avoidLowSec:Set[${Config.Missioneer.AvoidLowSec}]
 						if ${avoidLowSec} == FALSE || (${avoidLowSec} == TRUE && ${isLowSec} == FALSE)
 						{
@@ -698,14 +707,14 @@ objectdef obj_Agents
 			{
 				call Station.Undock
 			}
-			;UI:UpdateConsole["obj_Agents: DEBUG: Agent Name -> Index = ${This.AgentIndex} = ${Agent[${This.AgentName}].Index}"]
-			;UI:UpdateConsole["obj_Agents: DEBUG: Agent Index->Name = ${Agent[${This.AgentIndex}].Name}"]
-			;UI:UpdateConsole["obj_Agents: DEBUG: Agent Name->System  = ${Universe[${Agent[${This.AgentName}].Solarsystem}].ID}"]
-			;UI:UpdateConsole["obj_Agents: DEBUG: agent Index->System = ${Universe[${Agent[${This.AgentIndex}].Solarsystem}].ID}"]
-			;UI:UpdateConsole["obj_Agents: DEBUG: agentStation = ${Agent[${This.AgentIndex}].StationID}"]
-			call Ship.TravelToSystem ${Universe[${Agent[${This.AgentIndex}].Solarsystem}].ID}
+			;UI:UpdateConsole["obj_Agents: DEBUG: Agent Name -> Index = ${This.AgentIndex} = ${EVE.Agent[${This.AgentName}].Index}"]
+			;UI:UpdateConsole["obj_Agents: DEBUG: Agent Index->Name = ${EVE.Agent[${This.AgentIndex}].Name}"]
+			;UI:UpdateConsole["obj_Agents: DEBUG: Agent Name->System  = ${Universe[${EVE.Agent[${This.AgentName}].Solarsystem}].ID}"]
+			;UI:UpdateConsole["obj_Agents: DEBUG: agent Index->System = ${Universe[${EVE.Agent[${This.AgentIndex}].Solarsystem}].ID}"]
+			;UI:UpdateConsole["obj_Agents: DEBUG: agentStation = ${EVE.Agent[${This.AgentIndex}].StationID}"]
+			call Ship.TravelToSystem ${Universe[${EVE.Agent[${This.AgentIndex}].Solarsystem}].ID}
 			wait 50
-			call Station.DockAtStation ${Agent[${This.AgentIndex}].StationID}
+			call Station.DockAtStation ${EVE.Agent[${This.AgentIndex}].StationID}
 		}
 	}
 
@@ -761,6 +770,10 @@ objectdef obj_Agents
 		UI:UpdateConsole["obj_Agents: DEBUG: amIterator.Value.Name = ${amIterator.Value.Name}"]
 		UI:UpdateConsole["obj_Agents: DEBUG: amIterator.Value.ExpirationTime = ${amIterator.Value.ExpirationTime.DateAndTime}"]
 
+		isOreMining:Set[FALSE]
+		isIceMining:Set[FALSE]
+		isGasHarvesting:Set[FALSE]
+		
 		amIterator.Value:GetDetails
 		variable string details
 		variable int left = 0
@@ -770,7 +783,7 @@ objectdef obj_Agents
 		{
 			UI:UpdateConsole["obj_Agents: ERROR: Mission details window was not found!"]
 			UI:UpdateConsole["obj_Agents: DEBUG: amIterator.Value.Name.Escape = ${amIterator.Value.Name.Escape}"]
-			EVE:Execute[CmdCloseAllWindows]
+			EVE:Execute[CmdCloseActiveWindow]
 			return
 		}
 		; The embedded quotes look odd here, but this is required to escape the comma that exists in the caption and in the resulting html.
@@ -893,25 +906,69 @@ objectdef obj_Agents
 		Missions.MissionCache:SetLowSec[${amIterator.Value.AgentID},${isLowSec}]
 		
 		;Mining Missions, Gas Harvesting Determination
-		variable bool isGasHarvesting = FALSE
-		;left:Set[${details.Escape.Find["(Low Sec Warning!)"]}]
-        right:Set[${details.Escape.Find["(You need to fit a Gas Cloud Harvester to complete this mission.)"]}]
+
+		left:Set[${details.Escape.Find["Cytoserocin"]}]
+        right:Set[${details.Escape.Find["Cytoserocin"]}]
 		if ${left} > 0 || ${right} > 0
 		{
             UI:UpdateConsole["obj_Agents: DEBUG: left = ${left}"]
             UI:UpdateConsole["obj_Agents: DEBUG: right = ${right}"]
 			isGasHarvesting:Set[TRUE]
 			UI:UpdateConsole["obj_Agents: DEBUG: isGasHarvesting = ${isGasHarvesting}"]
+			UI:UpdateConsole["GAS SITE its alright"]
+			;Script:Pause
 		}
 		Missions.MissionCache:SetGasHarvesting[${amIterator.Value.AgentID},${isGasHarvesting}]
-
+		
+		;Mining Missions, Ice Mining Determination
+		
+		left:Set[${details.Escape.Find["Azure"]}]
+        right:Set[${details.Escape.Find["Azure"]}]
+		if ${left} > 0 || ${right} > 0
+		{
+            UI:UpdateConsole["obj_Agents: DEBUG: left = ${left}"]
+            UI:UpdateConsole["obj_Agents: DEBUG: right = ${right}"]
+			isIceMining:Set[TRUE]
+			UI:UpdateConsole["obj_Agents: DEBUG: isIceMining = ${isIceMining}"]
+			UI:UpdateConsole["As cold as Ice"]
+			;Script:Pause
+		}
+		Missions.MissionCache:SetIceMining[${amIterator.Value.AgentID},${isIceMining}]
+		
+		left:Set[${details.Escape.Find["Ice Harvester"]}]
+        right:Set[${details.Escape.Find["Ice Harvester"]}]
+		if ${left} > 0 || ${right} > 0
+		{
+            UI:UpdateConsole["obj_Agents: DEBUG: left = ${left}"]
+            UI:UpdateConsole["obj_Agents: DEBUG: right = ${right}"]
+			isIceMining:Set[TRUE]
+			UI:UpdateConsole["obj_Agents: DEBUG: isIceMining = ${isIceMining}"]
+			UI:UpdateConsole["As cold as Ice"]
+			;Script:Pause
+		}
+		;Mining Missions, Ore Mining Determination
+		
+		;left:Set[${details.Escape.Find["NOTGOOD"]}]
+        ;right:Set[${details.Escape.Find["NOTGOOD"]}]
+		;if ${left} > 0 || ${right} > 0
+		;{
+         ;   UI:UpdateConsole["obj_Agents: DEBUG: left = ${left}"]
+          ;  UI:UpdateConsole["obj_Agents: DEBUG: right = ${right}"]
+			;isOreMining:Set[TRUE]
+			;UI:UpdateConsole["obj_Agents: DEBUG: isOreMining = ${isOreMining}"]
+			;UI:UpdateConsole["Standard Ore Mining"]
+		;}
+		;Missions.MissionCache:SetOreMining[${amIterator.Value.AgentID},${isOreMining}]
+		
+		
   }
+
 
 	function UpdateLocatorAgent()
 	{
 		variable index:dialogstring dsIndex
 		variable iterator dsIterator
-		Agent[${This.AgentIndex}]:GetDialogResponses[dsIndex]
+		EVE.Agent[${This.AgentIndex}]:GetDialogResponses[dsIndex]
 		while ${dsIndex.Used} == 0
 		{
 			UI:UpdateConsole["Waiting for responses from agent to populate."]
@@ -924,7 +981,7 @@ objectdef obj_Agents
 			while ${dsIndex[1].Text.Find["View"]} > 0
 			{
 				UI:UpdateConsole["Waiting for locator agent conversation to update."]
-				Agent[${This.AgentIndex}]:GetDialogResponses[dsIndex]
+				EVE.Agent[${This.AgentIndex}]:GetDialogResponses[dsIndex]
 				wait 20
 			}
 		}
@@ -935,9 +992,9 @@ objectdef obj_Agents
 		variable index:dialogstring dsIndex
 		variable iterator dsIterator
 
-		if ${Agent[${This.AgentIndex}].Division.Equal["R&D"]}
+		if ${EVE.Agent[${This.AgentIndex}].Division.Equal["R&D"]}
 		{
-			UI:UpdateConsole["${Agent[${This.AgentIndex}].Name} :: R&D agents not supported after patch."]
+			UI:UpdateConsole["${EVE.Agent[${This.AgentIndex}].Name} :: R&D agents not supported after patch."]
 			return
 		}
 
@@ -946,7 +1003,7 @@ objectdef obj_Agents
 		wait 20
 
 		UI:UpdateConsole["obj_Agents: Starting conversation with agent ${This.ActiveAgent}."]
-		Agent[${This.AgentIndex}]:StartConversation
+		EVE.Agent[${This.AgentIndex}]:StartConversation
 		do
 		{
 			UI:UpdateConsole["obj_Agents: Waiting for conversation window..."]
@@ -961,7 +1018,7 @@ objectdef obj_Agents
 		variable int WaitCount
 		for( WaitCount:Set[0]; ${WaitCount} < 15; WaitCount:Inc )
 		{
-			Agent[${This.AgentIndex}]:GetDialogResponses[dsIndex]
+			EVE.Agent[${This.AgentIndex}]:GetDialogResponses[dsIndex]
 			if ${dsIndex.Used} > 0
 			{
 				break
@@ -969,7 +1026,7 @@ objectdef obj_Agents
 			wait 10
 		}
 
-		UI:UpdateConsole["${Agent[${This.AgentIndex}].Name} :: ${Agent[${This.AgentIndex}].Dialog}"]
+		UI:UpdateConsole["${EVE.Agent[${This.AgentIndex}].Name} :: ${EVE.Agent[${This.AgentIndex}].Dialog}"]
 
 	    dsIndex:GetIterator[dsIterator]
 
@@ -1062,7 +1119,10 @@ objectdef obj_Agents
 		detailsFile:Close
 
 		Missions.MissionCache:AddMission[${amIterator.Value.AgentID},"${amIterator.Value.Name}"]
-
+		;if ${amIterator.Value.Name} == "Stay Frosty"
+		;{
+		
+		;}
 		variable int factionID = 0
 		left:Set[${details.Escape.Find["<img src=\\\"factionlogo:"]}]
 		if ${left} > 0
@@ -1165,19 +1225,20 @@ objectdef obj_Agents
    		Missions.MissionCache:SetLowSec[${amIterator.Value.AgentID},${isLowSec}]
 		
 		;Mining Missions, Gas Harvesting Determination
-		variable bool isGasHarvesting = FALSE
+		;variable bool isGasHarvesting = FALSE
 		;left:Set[${details.Escape.Find["(Low Sec Warning!)"]}]
-        right:Set[${details.Escape.Find["(You need to fit a Gas Cloud Harvester to complete this mission.)"]}]
-		if ${left} > 0 || ${right} > 0
-		{
-            UI:UpdateConsole["obj_Agents: DEBUG: left = ${left}"]
-            UI:UpdateConsole["obj_Agents: DEBUG: right = ${right}"]
-			isGasHarvesting:Set[TRUE]
-			UI:UpdateConsole["obj_Agents: DEBUG: isGasHarvesting = ${isGasHarvesting}"]
-		}
-		Missions.MissionCache:SetGasHarvesting[${amIterator.Value.AgentID},${isGasHarvesting}]
+        ;right:Set[${details.Escape.Find["(You need to fit a Gas Cloud Harvester to complete this mission.)"]}]
+		;if ${left} > 0 || ${right} > 0
+		;{
+        ;   UI:UpdateConsole["obj_Agents: DEBUG: left = ${left}"]
+        ;    UI:UpdateConsole["obj_Agents: DEBUG: right = ${right}"]
+		;	isGasHarvesting:Set[TRUE]
+		;	UI:UpdateConsole["obj_Agents: DEBUG: isGasHarvesting = ${isGasHarvesting}"]
+		;}
+		;Missions.MissionCache:SetGasHarvesting[${amIterator.Value.AgentID},${isGasHarvesting}]
 		
 
+		Missions.MissionCache:SetLowSec[${amIterator.Value.AgentID},${isLowSec}]
 		variable time lastDecline
 		lastDecline:Set[${Config.Agents.LastDecline[${This.AgentName}]}]
 		lastDecline.Hour:Inc[4]
@@ -1185,7 +1246,7 @@ objectdef obj_Agents
 
 		if ${isLowSec} && ${Config.Missioneer.AvoidLowSec} == TRUE
 		{
-			if ${lastDecline.Timestamp} >= ${Time.Timestamp}
+			if ${lastDecline.Timestamp} >= ${Time.Timestamp} && !${Config.Miner.IceMining}
 			{
 				UI:UpdateConsole["obj_Agents: ERROR: You declined a mission less than four hours ago!  Switching agents...", LOG_CRITICAL]
 				skipList:Add[${amIterator.Value.AgentID}]
@@ -1200,9 +1261,9 @@ objectdef obj_Agents
 				Config:Save[]
 			}
 		}
-		elseif ${MissionBlacklist.IsBlacklisted[${Agent[id,${amIterator.Value.AgentID}].Level},"${amIterator.Value.Name}"]} == TRUE
+		elseif ${MissionBlacklist.IsBlacklisted[${EVE.Agent[id,${amIterator.Value.AgentID}].Level},"${amIterator.Value.Name}"]} == TRUE
 		{
-			if ${lastDecline.Timestamp} >= ${Time.Timestamp}
+			if ${lastDecline.Timestamp} >= ${Time.Timestamp} && !${Config.Miner.IceMining}
 			{
 				UI:UpdateConsole["obj_Agents: ERROR: You declined a mission less than four hours ago!  Switching agents...", LOG_CRITICAL]
 				call ChatIRC.Say "${Me.Name}: Can't decline blacklisted mission, changing agent."
@@ -1253,7 +1314,7 @@ objectdef obj_Agents
 		}
 		else
 		{
-			if ${lastDecline.Timestamp} >= ${Time.Timestamp}
+			if ${lastDecline.Timestamp} >= ${Time.Timestamp} && !${Config.Miner.IceMining}
 			{
 				UI:UpdateConsole["obj_Agents: ERROR: You declined a mission less than four hours ago!  Switching agents...", LOG_CRITICAL]
 				This:SetActiveAgent[${This.AgentList.NextAgent}]
@@ -1270,7 +1331,7 @@ objectdef obj_Agents
 
 		UI:UpdateConsole["Waiting for mission dialog to update...", LOG_DEBUG]
 		wait 60
-		UI:UpdateConsole["${Agent[${This.AgentIndex}].Name} Dialog: ${Agent[${This.AgentIndex}].Dialog}"]
+		UI:UpdateConsole["${EVE.Agent[${This.AgentIndex}].Name} Dialog: ${EVE.Agent[${This.AgentIndex}].Dialog}"]
 
 		;EVE:Execute[OpenJournal]
 		;wait 50
@@ -1297,7 +1358,7 @@ objectdef obj_Agents
 		}
 
 		UI:UpdateConsole["obj_Agents: Starting conversation with agent ${This.ActiveAgent}."]
-		Agent[${This.AgentIndex}]:StartConversation
+		EVE.Agent[${This.AgentIndex}]:StartConversation
 		do
 		{
 			UI:UpdateConsole["obj_Agents: Waiting for conversation window..."]
@@ -1305,13 +1366,13 @@ objectdef obj_Agents
 		}
 		while !${EVEWindow[ByCaption, "Agent Conversation - ${This.ActiveAgent}"](exists)}
 		call This.UpdateLocatorAgent
-		UI:UpdateConsole["${Agent[${This.AgentIndex}].Name} :: ${Agent[${This.AgentIndex}].Dialog}"]
+		UI:UpdateConsole["${EVE.Agent[${This.AgentIndex}].Name} :: ${EVE.Agent[${This.AgentIndex}].Dialog}"]
 
 	    ; display your dialog options
 	    variable index:dialogstring dsIndex
 	    variable iterator dsIterator
 
-	    Agent[${This.AgentIndex}]:GetDialogResponses[dsIndex]
+	    EVE.Agent[${This.AgentIndex}]:GetDialogResponses[dsIndex]
 	    dsIndex:GetIterator[dsIterator]
 
 		if ${dsIterator:First(exists)}
@@ -1324,14 +1385,14 @@ objectdef obj_Agents
 	    ; Now wait a couple of seconds and then get the new dialog options...and so forth.  The "Wait" needed may differ from person to person.
 	    UI:UpdateConsole["Waiting for agent dialog to update..."]
 	    wait 60
-		UI:UpdateConsole["${Agent[${This.AgentIndex}].Name} :: ${Agent[${This.AgentIndex}].Dialog}"]
+		UI:UpdateConsole["${EVE.Agent[${This.AgentIndex}].Name} :: ${EVE.Agent[${This.AgentIndex}].Dialog}"]
 
 
 		; display your dialog options2
 	    variable index:dialogstring dsIndex2
 	    variable iterator dsIterator2
 
-	    Agent[${This.AgentIndex}]:GetDialogResponses[dsIndex2]
+	    EVE.Agent[${This.AgentIndex}]:GetDialogResponses[dsIndex2]
 	    dsIndex2:GetIterator[dsIterator2]
 
 		if ${dsIterator2:First(exists)}
@@ -1356,7 +1417,7 @@ objectdef obj_Agents
 		;wait 50
 
 		UI:UpdateConsole["obj_Agents: Starting conversation with agent ${This.ActiveAgent}."]
-		Agent[${This.AgentIndex}]:StartConversation
+		EVE.Agent[${This.AgentIndex}]:StartConversation
         do
         {
 			UI:UpdateConsole["obj_Agents: Waiting for conversation window..."]
@@ -1364,13 +1425,13 @@ objectdef obj_Agents
         }
         while !${EVEWindow[ByCaption, "Agent Conversation - ${This.ActiveAgent}"](exists)}
 
-		UI:UpdateConsole["${Agent[${This.AgentIndex}].Name} :: ${Agent[${This.AgentIndex}].Dialog}"]
+		UI:UpdateConsole["${EVE.Agent[${This.AgentIndex}].Name} :: ${EVE.Agent[${This.AgentIndex}].Dialog}"]
 
 	    ; display your dialog options
 	    variable index:dialogstring dsIndex
 	    variable iterator dsIterator
 
-	    Agent[${This.AgentIndex}]:GetDialogResponses[dsIndex]
+	    EVE.Agent[${This.AgentIndex}]:GetDialogResponses[dsIndex]
 	    dsIndex:GetIterator[dsIterator]
 
 		if ${dsIndex.Used} == 2
@@ -1382,7 +1443,7 @@ objectdef obj_Agents
 	    ; Now wait a couple of seconds and then get the new dialog options...and so forth.  The "Wait" needed may differ from person to person.
 	    UI:UpdateConsole["Waiting for agent dialog to update..."]
 	    wait 60
-		UI:UpdateConsole["${Agent[${This.AgentIndex}].Name} :: ${Agent[${This.AgentIndex}].Dialog}"]
+		UI:UpdateConsole["${EVE.Agent[${This.AgentIndex}].Name} :: ${EVE.Agent[${This.AgentIndex}].Dialog}"]
 
 		;EVE:Execute[OpenJournal]
 		;wait 50

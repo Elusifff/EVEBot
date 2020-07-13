@@ -9,9 +9,6 @@
 
 objectdef obj_EVEBot
 {
-	variable string SVN_REVISION = "$Rev$"
-	variable int Version
-
 	variable bool ReturnToStation = FALSE
 	variable bool Paused = FALSE
 	variable time NextPulse
@@ -121,14 +118,20 @@ objectdef obj_EVEBot
 
 	method SetVersion(int Version=${VersionNum})
 	{
-		if ${APP_HEADURL.Find["EVEBot/branches/stable"]}
+		declarevariable tmpstr string
+		if EVEBOT_DEBUG == 1
 		{
-			AppVersion:Set["${APP_NAME} Stable Revision ${VersionNum}"]
+			tmpstr:Set[" - Debugging (Objects: DEBUG_TARGET)"]
 		}
-		else
-		{
-			AppVersion:Set["${APP_NAME} Dev Revision ${VersionNum}"]
-		}
+		AppVersion:Set["${APP_NAME} Stable Revision${tmpstr}"]
+		;if ${APP_HEADURL.Find["EVEBot/branches/stable"]}
+		;{
+	  ;	AppVersion:Set["${APP_NAME} Stable Revision ${VersionNum}"]
+		;}
+		;else
+		;{
+		;	AppVersion:Set["${APP_NAME} Dev Revision ${VersionNum}"]
+		;}
 	}
 
 	member:int GameHour()

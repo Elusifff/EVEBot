@@ -13,9 +13,6 @@
 
 		objectdef obj_Miner
 		{
-				variable string SVN_REVISION = "$Rev$"
-				variable int Version
-
 				variable obj_Combat Combat
 
 				method Initialize()
@@ -79,9 +76,6 @@
 
 objectdef obj_Combat
 {
-	variable string SVN_REVISION = "$Rev$"
-	variable int Version
-
 	variable time NextPulse
 	variable int PulseIntervalInSeconds = 1
 
@@ -280,7 +274,7 @@ objectdef obj_Combat
 		This.CurrentState:Set["FLEE"]
 		if !${This.Fled}
 		{
-			Sound:Speak["Fleeting to safespot! Aura, I need warp speed in three minutes or we're all dead!", 1.1]
+			Sound:Speak["Fleeing to safespot! Aura, I need warp speed in three minutes or we're all dead!", 1.1]
 		}
 		This.Fled:Set[TRUE]
 		EVE:Execute[CmdDronesReturnToBay]
@@ -414,11 +408,11 @@ objectdef obj_Combat
 			{
 				if ${Config.Combat.AnomalyAssistMode}
 				{
-					Ship.Drones:LaunchCombat[]
+					Ship.Drones:LaunchAll[]
 				}
 				elseif ${Me.TargetCount} >= 1 && ${Me.TargetedByCount} >= ${Me.TargetCount}
 				{
-					Ship.Drones:LaunchCombat[]
+					Ship.Drones:LaunchAll[]
 				}
 			}
 		}

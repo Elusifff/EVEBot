@@ -8,7 +8,7 @@
 */
 
 #macro Validate_Ship()
-		if !${EVEBot.SessionValid}
+		if !${MyShip(exists)} || !${EVEBot.SessionValid}
 		{
 			return
 		}
@@ -81,8 +81,6 @@
 
 objectdef obj_Ship inherits obj_BaseClass
 {
-	variable string SVN_REVISION = "$Rev$"
-
 	variable int MODE_WARPING = 3
 
 	variable float BaselineUsedCargo
@@ -1053,6 +1051,7 @@ objectdef obj_Ship inherits obj_BaseClass
 					This.ModuleList_TrackingComputer:Insert[${Module.Value.ID}]
 					continue
 				case GROUP_GANGLINK
+				case GROUP_COMMAND_BURST
 					This.ModuleList_GangLinks:Insert[${Module.Value.ID}]
 					continue
 				default
@@ -1446,7 +1445,7 @@ objectdef obj_Ship inherits obj_BaseClass
 			return
 		}
 
-		Me.Ship.Module[${Slot}].LastTarget:MakeActiveTarget
+		MyShip.Module[${Slot}].LastTarget:MakeActiveTarget
 		if ${Activate.Equal[ON]}
 		{
 			MyShip.Module[${Slot}]:Activate
@@ -1791,26 +1790,27 @@ objectdef obj_Ship inherits obj_BaseClass
 	{
 		Validate_Ship()
 
-		variable string ShipName = ${MyShip}
-		variable int GroupID
-		variable int TypeID
+		variable int GroupID = 0
+
+		if (!${MyShip(exists)})
+		{
+			return FALSE
+		}
 
 		if ${Me.InSpace} && !${Me.InStation}
 		{
 			GroupID:Set[${MyShip.ToEntity.GroupID}]
-			TypeID:Set[${MyShip.ToEntity.TypeID}]
 		}
 		elseif !${Me.InSpace} && ${Me.InStation}
 		{
 			GroupID:Set[${MyShip.ToItem.GroupID}]
-			TypeID:Set[${MyShip.ToItem.TypeID}]
 		}
 		else
 		{
 			return FALSE
 		}
-		if ${ShipName.Right[10].Equal["'s Capsule"]} || \
-			${GroupID} == GROUP_CAPSULE
+
+		if ${GroupID} == GROUP_CAPSULE || ${MyShip.Name.Right[10].Equal["'s Capsule"]}
 		{
 			if !${This.AlertedInPod}
 			{

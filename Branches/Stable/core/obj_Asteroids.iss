@@ -245,6 +245,7 @@ objectdef obj_Asteroids
 				return
 			}
 
+
 			UI:UpdateConsole["ERROR: OBJ_Asteroids:MoveToField: No asteroid belts in the area...", LOG_CRITICAL]
 			#if EVEBOT_DEBUG
 			UI:UpdateConsole["OBJ_Asteroids:MoveToField: Total Entities: ${EVE.EntitiesCount}", LOG_DEBUG]
@@ -290,6 +291,7 @@ objectdef obj_Asteroids
 			echo "WARNING: obj_Asteroids: Ore Type list is empty, please check config"
 		}
 
+
 	}
 
 	function UpdateList(int64 EntityIDForDistance=-1)
@@ -299,16 +301,23 @@ objectdef obj_Asteroids
 		variable index:entity AsteroidList_OutOfRangeTmp
 		variable iterator AsteroidIt
 
-		if ${Ship.OptimalMiningRange} == 0 && ${Config.Miner.OrcaMode} || ${Config.Miner.UseMiningDrones} && ${Ship.TotalMiningLasers} == 0
+		if ${Ship.OptimalMiningRange} == 0 && ${Config.Miner.OrcaMode}
 		{
+			UI:UpdateConsole["BAD"]
 			This.MaxDistanceToAsteroid:Set[${Math.Calc[20000 * ${Config.Miner.MiningRangeMultipler}]}]
+		}
+		if ${Config.Miner.UseMiningDrones} && ${Ship.TotalMiningLasers} == 0
+		{
+			UI:UpdateConsole["GOOD"]
+			This.MaxDistanceToAsteroid:Set$[{Math.Calc[60000 * ${Config.Miner.MiningRangeMultipler}]}]
 		}
 		else
 		{
+			UI:UpdateConsole["MEDIOCRE"]
 			This.MaxDistanceToAsteroid:Set[${Math.Calc[${Ship.OptimalMiningRange} * ${Config.Miner.MiningRangeMultipler}]}]
 		}
 
-		if ${Config.Miner.IceMining}
+		if ${Config.Miner.IceMining} || ${Agents.isIceMining} == True
 		{
 			Config.Miner.IceTypesRef:GetSettingIterator[This.OreTypeIterator]
 		}
@@ -340,11 +349,16 @@ objectdef obj_Asteroids
 				else
 				{
 					EVE:QueryEntities[AsteroidListTmp, "CategoryID = ${This.AsteroidCategoryID} && Name =- \"${This.OreTypeIterator.Key}\""]
+				
+					;EVE:QueryEntities[AsteroidListTmp, "CategoryID = ${This.AsteroidCategoryID} && Name =- \"${This.OreTypeIterator.Key}\" && DistanceTo[${EntityIDForDistance}] < ${Math.Calc[${Ship.OptimalMiningRange} + 2000]}"]
+					
 				}
 
 				variable int Count
 				variable int Max
 				; Randomize the first 15 in-range asteroids in the list so that all the miners don't glom on the same one.
+				
+				;AsteroidListTmp:RemoveByQuery[${LavishScript.CreateQuery["DistanceTo[${EntityIDForDistance}] >= 5"]
 				if !${Config.Miner.IceMining} && ${AsteroidListTmp.Used} > 3
 				{
 					Max:Set[${AsteroidListTmp.Used}]
@@ -358,6 +372,8 @@ objectdef obj_Asteroids
 					}
 				}
 				; Append the in-range asteroids of the current ore type to the final list
+				AsteroidListTmp:RemoveByQuery[${LavishScript.CreateQuery["DistanceTo[${MyShip.ID}] >= 60000"]}]
+				AsteroidListTmp:Collapse
 				AsteroidListTmp:GetIterator[AsteroidIt]
 				if ${AsteroidIt:First(exists)}
 				{
@@ -367,7 +383,8 @@ objectdef obj_Asteroids
 					}
 					while ${AsteroidIt:Next(exists)}
 				}
-
+				
+				UI:UpdateConsole["OBJ_Asteroids:UpdateList: ${AsteroidList.Used} (In Range: ${AsteroidListTmp.Used} OOR: ${AsteroidList_OutOfRangeTmp.Used}) asteroids found", LOG_DEBUG]
 				; Randomize the first 10 out of range asteroids in the list so that all the miners don't glom on the same one.
 				if !${Config.Miner.IceMining} && ${AsteroidList_OutOfRangeTmp.Used} > 3
 				{
@@ -444,88 +461,7 @@ objectdef obj_Asteroids
 		}
 		return TRUE
 	}
-	;	If you are a drone exclusive miner, you probably want your targets to be close to each other
-	function:bool TargetInClusters(int64 DistanceToTarget=-1)
-	{
-		variable iterator AsteroidIterator
 
-		if ${AsteroidList.Used} == 0
-		{
-			call This.UpdateList
-		}
-
-		This.AsteroidList:GetIterator[AsteroidIterator]
-		if ${AsteroidIterator:First(exists)}
-		{
-			do
-			{
-				if ${DistanceToTarget} == -1
-				{
-					
-					if ${Entity[${AsteroidIterator.Value.ID}](exists)} && \
-						!${AsteroidIterator.Value.IsLockedTarget} && \
-						!${AsteroidIterator.Value.BeingTargeted} && \
-						${AsteroidIterator.Value.Distance} < ${MyShip.MaxTargetRange} && \
-						${AsteroidIterator.Value.Distance} < ${Ship.OptimalMiningRange}
-					{
-						break
-					}
-				}
-				else
-				{
-					if ${Entity[${AsteroidIterator.Value.ID}](exists)} && \
-						!${AsteroidIterator.Value.IsLockedTarget} && \
-						!${AsteroidIterator.Value.BeingTargeted} && \
-						${AsteroidIterator.Value.Distance} < ${MyShip.MaxTargetRange} && \
-						${AsteroidIterator.Value.DistanceTo[${DistanceToTarget}]} < 10000
-					{
-						variable iterator Target
-						variable bool IsWithinRangeOfOthers=TRUE
-						Targets:UpdateLockedAndLockingTargets
-						Targets.LockedOrLocking:GetIterator[Target]
-						if ${Target:First(exists)}
-							do
-							{
-								if ${AsteroidIterator.Value.CategoryID} == ${Asteroids.AsteroidCategoryID}
-								{
-									
-										if ${AsteroidIterator.Value.DistanceTo[${Target.Value.ID}]} > 30000
-										{
-											IsWithinRangeOfOthers:Set[FALSE]
-										}
-								}
-							}
-							while ${Target:Next(exists)}
-						if ${IsWithinRangeOfOthers}
-							break
-					}
-				}
-			}
-			while ${AsteroidIterator:Next(exists)}
-
-			if ${AsteroidIterator.Value(exists)} && ${Entity[${AsteroidIterator.Value.ID}](exists)}
-			{
-				if ${AsteroidIterator.Value.IsLockedTarget} || \
-					${AsteroidIterator.Value.BeingTargeted}
-				{
-					return TRUE
-				}
-
-				UI:UpdateConsole["Locking Asteroid ${AsteroidIterator.Value.Name}: ${EVEBot.MetersToKM_Str[${AsteroidIterator.Value.Distance}]}"]
-				AsteroidIterator.Value:LockTarget
-
-				call This.UpdateList
-				return TRUE
-			}
-			else
-			{
-				call This.UpdateList
-				return FALSE
-			}
-		}
-		call This.MoveToField TRUE
-		return FALSE
-	}
 	
 	function:bool TargetNextInRange(int64 DistanceToTarget=-1)
 	{
@@ -760,7 +696,7 @@ objectdef obj_Asteroids
 			}
 				if !${IgnoreTargeting}
 				{
-					if ${AsteroidIterator.Value.Distance} >= 50000
+					if ${AsteroidIterator.Value.Distance} >= 50000 && ${Entity[${AsteroidIterator.Value.ID}](exists)}
 					{
 					call Ship.Approach ${AsteroidIterator.Value.ID} 25000
 					}

@@ -1,11 +1,7 @@
 objectdef obj_Logger
 {
-	variable string SVN_REVISION = "$Rev$"
-	variable int Version
-
 	variable string LogFile
 	variable string StatsLogFile
-	variable string CriticalLogFile
 	variable queue:string ConsoleBuffer
 	variable string PreviousMsg
 
@@ -14,7 +10,6 @@ objectdef obj_Logger
 	method Initialize()
 	{
 		This.LogFile:Set["./config/logs/${Me.Name}.log"]
-		This.CriticalLogFile:Set["./config/logs/${Me.Name}_Critical.log"]
 		This.StatsLogFile:Set["./config/logs/${Me.Name}_Stats.log"]
 
 		This:InitializeLogs
@@ -100,7 +95,6 @@ objectdef obj_Logger
 				if ${Level} == LOG_CRITICAL
 				{
 					ChatIRC:QueueMessage["${msg}"]
-					redirect -append "${This.CriticalLogFile}" Echo "${msg}"
 				}
 			}
 			else
@@ -140,11 +134,7 @@ objectdef obj_Logger
 		if EVEBOT_DEBUG == 1
 		{
 			redirect -append "${This.LogFile}" echo "** Debugging DEBUG_TARGET"
-			redirect -append "${This.CriticalLogFile}" echo "** Debugging DEBUG_TARGET"
 		}
-
-		redirect -append "${This.CriticalLogFile}" echo "--------------------------------------------------------------------------------------"
-		redirect -append "${This.CriticalLogFile}" echo "** ${AppVersion} starting on ${Time.Date} at ${Time.Time24}"
 
 		This:Log["Starting ${AppVersion}"]
 

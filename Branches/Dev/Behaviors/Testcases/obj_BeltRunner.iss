@@ -7,7 +7,6 @@
 
 objectdef obj_BeltRunner inherits obj_BaseClass
 {
-	variable string SVN_REVISION = "$Rev$"
 	variable string CurrentState = "STATE_IDLE"
 
 	method Initialize()
@@ -36,8 +35,6 @@ objectdef obj_BeltRunner inherits obj_BaseClass
 		if ${This.PulseTimer.Ready}
 		{
 			This:SetState
-			echo Targets.PC: ${Targets.PC}
-
 			This.PulseTimer:Update
 		}
 	}

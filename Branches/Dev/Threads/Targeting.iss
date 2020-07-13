@@ -31,9 +31,6 @@ objectdef obj_QueueTarget
 
 objectdef obj_EVEBOT_Targeting inherits obj_BaseClass
 {
-	variable string SVN_REVISION = "$Rev$"
-	variable int Version
-
 	variable bool Running = TRUE
 
 	variable time NextPulse
@@ -65,7 +62,7 @@ objectdef obj_EVEBOT_Targeting inherits obj_BaseClass
 
 		if ${Time.Timestamp} >= ${This.NextPulse.Timestamp}
 		{
-			if !${EVEBot.Paused}
+			if !${EVEBot.Paused} && ${Me.InSpace}
 			{
 				This:PruneQueue[]
 				if ${This.Running}
