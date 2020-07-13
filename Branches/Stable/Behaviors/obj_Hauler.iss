@@ -26,10 +26,6 @@ objectdef obj_FullMiner
 
 objectdef obj_Hauler
 {
-	;	Versioning information
-	variable string SVN_REVISION = "$Rev$"
-	variable int Version
-
 	variable collection:obj_FullMiner FullMiners
 
 	;	State information (What we're doing)
@@ -216,7 +212,7 @@ objectdef obj_Hauler
 			;	*	If everything above failed and there's a station in the same system, dock there
 			;	*	If everything above failed, check if we're warping and warp to a safe spot
 			case HARDSTOP
-				relay all -event EVEBot_HARDSTOP
+				relay all -event EVEBot_HARDSTOP "${Me.Name} - ${Config.Common.BotModeName}"
 				if ${Me.InStation}
 				{
 					break
@@ -689,6 +685,7 @@ objectdef obj_Hauler
 		if ${Entity[Name = "${Config.Hauler.HaulerPickupName}"](exists)}
 		{
 			OrcaID:Set[${Entity[Name = "${Config.Hauler.HaulerPickupName}"]}]
+			;UI:UpdateConsole["${OrcaID}"]
 		}
 		else
 		{
@@ -744,6 +741,7 @@ objectdef obj_Hauler
 			}
 			UI:UpdateConsole["ALERT: Transferring Cargo"]
 			call Cargo.TransferListFromShipCorporateHangar ${OrcaID}
+			;call Cargo.TransferCargoFromShipCorporateHangarToOreHold ${OrcaID}
 		}
 
 		return
@@ -786,9 +784,6 @@ objectdef obj_Hauler
 
 		if ${This.HaulerFull}
 		{
-			Ship:StackOreHold
-			wait 100
-			Ship:StackOreHold
 			return
 		}
 
@@ -801,7 +796,7 @@ objectdef obj_Hauler
 			}
 			call Ship.WarpToFleetMember ${charID}
 		}
-		Ship:Activate_Gang_Links
+
 		call Ship.OpenCargo
 
 		This:BuildJetCanList[${charID}]
@@ -1011,7 +1006,7 @@ objectdef obj_Hauler
 						wait 20
 					}
 				}
-				if ${Ship.CargoFreeSpace} < 100
+				if ${Ship.CargoFreeSpace} < 1000
 				{
 					UI:UpdateConsole["DEBUG: obj_Hauler.LootEntity: Ship Cargo Free Space: ${Ship.CargoFreeSpace} < ${Ship.CargoMinimumFreeSpace}"]
 					break
@@ -1038,7 +1033,6 @@ objectdef obj_Hauler
 		switch ${Config.Miner.DeliveryLocationTypeName}
 		{
 			case Station
-				Ship:Deactivate_Gang_Links
 				call Ship.TravelToSystem ${EVE.Bookmark[${Config.Miner.DeliveryLocation}].SolarSystemID}
 				call Station.DockAtStation ${EVE.Bookmark[${Config.Miner.DeliveryLocation}].ItemID}
 				break
@@ -1273,10 +1267,9 @@ objectdef obj_Hauler
 	;	*	Are our miners ice mining
 	member:bool HaulerFull()
 	{
-		if ${MyShip.HasOreHold} && ${Ship.OreHoldFull}
+		if ${MyShip.HasOreHold} && ${Ship.OreHoldFreeSpace} < 1000
 		{
 			UI:UpdateConsole["Ore Hold Full. Dropping off cargo."]
-			Ship:Deactivate_Gang_Links
 			return TRUE
 		}
 		

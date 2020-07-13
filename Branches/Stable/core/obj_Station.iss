@@ -9,9 +9,6 @@
 
 objectdef obj_EVEDB_Stations
 {
-	variable string SVN_REVISION = "$Rev$"
-	variable int Version
-
 	variable string CONFIG_FILE = "${BaseConfig.CONFIG_PATH}/EVEDB_Stations.xml"
 	variable string SET_NAME = "EVEDB_Stations"
 
@@ -35,9 +32,6 @@ objectdef obj_EVEDB_Stations
 
 objectdef obj_Station
 {
-	variable string SVN_REVISION = "$Rev$"
-	variable int Version
-
 	variable index:item StationCargo
 	variable index:item DronesInStation
 
@@ -281,6 +275,7 @@ objectdef obj_Station
 			}
 			while !${This.DockedAtStation[${StationID}]}
 			wait 75
+			Ship:StackOreHold
 			UI:UpdateConsoleIRC["Finished Docking"]
 		}
 		else
@@ -292,7 +287,8 @@ objectdef obj_Station
 
 	function Dock()
 	{
-		variable int64 StationID = ${Entity["(GroupID = 15 || GroupID = 1657) && Name = ${Config.Common.HomeStation}"].ID}
+		variable int64 StationID
+		StationID:Set[${Entity["(GroupID = 15 || GroupID = 1657) && Name = ${Config.Common.HomeStation}"].ID}]
 
 		UI:UpdateConsole["Docking - Trying Home station..."]
 		if ${StationID} <= 0 || !${Entity[${StationID}](exists)}

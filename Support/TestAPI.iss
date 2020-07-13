@@ -8,15 +8,14 @@
 
 #define TESTAPI_DEBUG 0
 
-#include ../Branches/Dev/core/defines.iss
-;#include ${LavishScript.HomeDirectory}/Scripts/isxGamesCommon/CyberTech/obj_PulseTimer.iss
+#include ../Branches/Stable/core/defines.iss
+#include ../Branches/Stable/core/obj_IRC.iss
+;#include ${LavishScript.HomeDirectory}/Scripts/isxScripts/Utilities/CyberTech/obj_PulseTimer.iss
 ;#include ../Branches/Dev/core/Lib/obj_BaseClass.iss
-#include ../Branches/Dev/External/isxGamesCommon/CyberTech/obj_LSTypeIterator.iss
+#include ${LavishScript.HomeDirectory}/Scripts/isxScripts/Utilities/CyberTech/obj_LSTypeIterator.iss
 
 objectdef obj_UI
 {
-	variable string SVN_REVISION = "$Rev$"
-	variable int Version
 	variable string LogFile
 
 	method Initialize()
@@ -64,3 +63,4 @@ objectdef obj_UI
 }
 
 variable obj_UI UI
+variable obj_IRC ChatIRC

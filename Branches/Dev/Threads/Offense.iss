@@ -9,8 +9,6 @@
 */
 objectdef obj_Offense inherits obj_BaseClass
 {
-	variable string SVN_REVISION = "$Rev$"
-
 	variable bool Enabled = TRUE
 
 	variable time NextAmmoCheck
@@ -110,6 +108,10 @@ objectdef obj_Offense inherits obj_BaseClass
 
 	method TakeOffensiveAction()
 	{
+		if !${Me.InSpace}
+		{
+			return
+		}
 		if ${Me.ActiveTarget(exists)} && !${Me.ActiveTarget.IsPC}
 		{
 			if !${This.IsConcordTarget[${Me.ActiveTarget.GroupID}]}

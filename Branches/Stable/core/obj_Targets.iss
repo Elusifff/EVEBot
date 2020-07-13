@@ -47,9 +47,6 @@ Tairei Namazoth
 
 objectdef obj_Targets
 {
-	variable string SVN_REVISION = "$Rev$"
-	variable int Version
-
 	variable index:string PriorityTargets
 	variable iterator PriorityTarget
 
@@ -481,7 +478,7 @@ objectdef obj_Targets
 		variable index:entity Targets
 		variable iterator Target
 
-		/* Me.Ship.MaxTargetRange contains the (possibly) damped value */
+		/* MyShip.MaxTargetRange contains the (possibly) damped value */
 		if ${Ship.TypeID} == TYPE_RIFTER
 		{
 			EVE:QueryEntities[Targets, "CategoryID = CATEGORYID_ENTITY && Distance <= 100000"]
@@ -890,6 +887,7 @@ objectdef obj_Targets
 				case GROUP_LARGECOLLIDABLEOBJECT
 				case GROUP_LARGECOLLIDABLESHIP
 				case GROUP_LARGECOLLIDABLESTRUCTURE
+				case GROUP_ROAMINGSLEEPERSCRUISER
 					;UI:UpdateConsole["DEBUG: Ignoring entity ${tgtIterator.Value.Group} (${tgtIterator.Value.GroupID})"]
 					continue
 					break

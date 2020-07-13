@@ -9,9 +9,6 @@
 
 objectdef obj_MissionCache
 {
-	variable string SVN_REVISION = "$Rev$"
-	variable int Version
-
 	variable string CONFIG_FILE = "${Script.CurrentDirectory}/Config/${Me.Name} Mission Cache.xml"
 	variable string SET_NAME = "Missions"
 
@@ -116,9 +113,6 @@ objectdef obj_MissionCache
 
 objectdef obj_MissionDatabase
 {
-	variable string SVN_REVISION = "$Rev$"
-	variable int Version
-
 	variable string CONFIG_FILE = "${BaseConfig.DATA_PATH}/Mission Database.xml"
 	variable string SET_NAME = "Mission Database"
 
@@ -181,9 +175,6 @@ objectdef obj_MissionDatabase
 
 objectdef obj_Missions
 {
-	variable string SVN_REVISION = "$Rev$"
-	variable int Version
-
 	variable obj_MissionCache MissionCache
 	variable obj_MissionDatabase MissionDatabase
 	variable obj_MissionCombat missionCombat
@@ -258,7 +249,7 @@ objectdef obj_Missions
 		call Cargo.CloseHolds
 		call Cargo.OpenHolds
 
-	    Agents:SetActiveAgent[${Agent[id, ${agentID}].Name}]
+	    Agents:SetActiveAgent[${EVE.Agent[id, ${agentID}].Name}]
 
 		if ${This.MissionCache.Volume[${agentID}]} == 0
 		{
@@ -380,7 +371,7 @@ objectdef obj_Missions
 		variable int        TypeID
 		variable int        ItemQuantity
 
-		Agents:SetActiveAgent[${Agent[id,${agentID}].Name}]
+		Agents:SetActiveAgent[${EVE.Agent[id,${agentID}].Name}]
 
 		itemName:Set[${EVEDB_Items.Name[${This.MissionCache.TypeID[${agentID}]}]}]
 		itemVolume:Set[${EVEDB_Items.Volume[${This.MissionCache.TypeID[${agentID}]}]}]
@@ -504,7 +495,7 @@ objectdef obj_Missions
 ;
 ;		Logger:Log["obj_Missions: DEBUG: Shiptype ${Ship.Type} (${Ship.TypeID}) Mission agent (${MissionCache.Name[${agentID}]}) (${Agents.AgentName})"]
 ;
-;		variable string missLevel = ${Agent[id,${agentID}].Level}
+;		variable string missLevel = ${EVE.Agent[id,${agentID}].Level}
 ;		variable string missionName = ${MissionCache.Name[${agentID}]}
 ;
 ;
@@ -1210,7 +1201,7 @@ objectdef obj_Missions
 		variable int        TypeID
 		variable int        ItemQuantity
 
-		;;Agents:SetActiveAgent[${Agent[id,${agentID}].Name}]
+		;;Agents:SetActiveAgent[${EVE.Agent[id,${agentID}].Name}]
 
 		itemName:Set[${EVEDB_Items.Name[${This.MissionCache.TypeID[${agentID}]}]}]
 		itemVolume:Set[${EVEDB_Items.Volume[${This.MissionCache.TypeID[${agentID}]}]}]

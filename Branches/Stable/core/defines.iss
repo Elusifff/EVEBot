@@ -9,17 +9,19 @@
 
 variable string APP_NAME = "EVEBot"
 variable string APP_PATH = "EVEBot/EVEBot.iss"
-variable string SVN_REVISION = "$Rev$"
-variable string APP_HEADURL = "$HeadURL$"
+variable string APP_HEADURL = ""
 
-variable string APP_MANIFEST = "https://www.isxgames.com/EVEBot/Trunk/EVEbot/manifest.xml"
-variable string APP_MANIFEST_TRUNK = "https://www.isxgames.com/EVEBot/Trunk/EVEbot/manifest-trunk.xml"
-
-variable string AppVersion = "${APP_NAME} Version ${SVN_REVISION.Token[2, " "]}"
-variable int VersionNum = ${SVN_REVISION.Token[2, " "]}
+; Shown on UI
+variable string AppVersion = "0"
+variable int VersionNum = 0
 
 #define EVEBOT_DEBUG 0
 #define DEBUG_ENTITIES 0
+
+; If you want to debug specific modules or classes, place the class name here.
+; Provided the class is using the proper ${LogPrefix} standard, it will be filtered appropriately -- CyberTech
+; Default is "All" for everything
+#define DEBUG_TARGET All
 
 ; Do not set this to 1 unless you have downloaded and installed the ISXIM
 ; extension from http://www.isxgames.com/forums/showthread.php?t=3829
@@ -138,7 +140,9 @@ variable int VersionNum = ${SVN_REVISION.Token[2, " "]}
 #define WARNSOUND	"${Script.CurrentDirectory}/sounds/warning.wav"
 
 
+#define GROUP_SURVEYSCANNER 49
 #define GROUP_GANGLINK 316
+#define GROUP_COMMAND_BURST 1770
 #define GROUP_ACCELERATIONGATEKEYS 474
 #define GROUP_AGENTSINSPACE 517
 #define GROUP_ALLIANCE 32
@@ -549,6 +553,7 @@ variable int VersionNum = ${SVN_REVISION.Token[2, " "]}
 #define GROUP_HEAVYINTERDICTORS 894
 #define GROUP_MARAUDERS 900
 #define GROUP_TARGETPAINTER 379
+#define GROUP_INVASIONNPS 4028
 
 #define TYPE_ACCELERATION_GATE 17831
 

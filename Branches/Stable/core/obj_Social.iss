@@ -14,9 +14,6 @@ This contains all stuff dealing with other players around us. - Hessinger
 
 objectdef obj_Social
 {
-	variable string SVN_REVISION = "$Rev$"
-	variable int Version
-
 	variable index:pilot PilotIndex
 	variable index:entity EntityIndex
 	variable collection:time WhiteListPilotLog
@@ -741,11 +738,11 @@ objectdef obj_Social
 					continue
 				}
 
-				;if ${PilotIterator.Value.ToEntity.IsTargetingMe}
-				;{
-					;UI:UpdateConsole["obj_Social: Hostile on grid: ${PilotIterator.Value.Name} is targeting me", LOG_CRITICAL]
-					;bReturn:Set[TRUE]
-				;}
+				if ${PilotIterator.Value.ToEntity.IsTargetingMe}
+				{
+					UI:UpdateConsole["obj_Social: Hostile on grid: ${PilotIterator.Value.Name} is targeting me", LOG_CRITICAL]
+					bReturn:Set[TRUE]
+				}
 
 				; Entity.Security returns -9999.00 if it fails, so we need to check for that
 				PilotSecurityStatus:Set[${PilotIterator.Value.ToEntity.Security}]
@@ -776,7 +773,7 @@ objectdef obj_Social
 				UI:UpdateConsole["Taking a break!", LOG_CRITICAL]
 				if ${Config.Combat.BroadcastBreaks}
 				{
-					relay all -event EVEBot_HARDSTOP
+					relay all -event EVEBot_HARDSTOP "${Me.Name} - ${Config.Common.BotModeName}"
 				}
 				else
 				{
@@ -815,12 +812,12 @@ objectdef obj_Social
 
 	
 	;This method is triggered by an event.  If triggered, it tells us one of our fellow miners has entered the HARDSTOP state, and we should also run
-	method TriggerHARDSTOP()
+	method TriggerHARDSTOP(string SourceInfo)
 	{
-		UI:UpdateConsole["TriggerHARDSTOP called by fleetmate", LOG_CRITICAL]
+		UI:UpdateConsole["TriggerHARDSTOP called by ${SourceInfo}", LOG_CRITICAL]
 		EVEBot.ReturnToStation:Set[TRUE]
 	}
-	;This method is triggered by an event.  If triggered, it tells us one of our fellow miners has entered the HARDSTOP state, and we should also run
+	;This method is triggered by an event.  If triggered, it tells us one of our fellow miners has aborted the hardstop state
 	method AbortHARDSTOP()
 	{
 		EVEBot.ReturnToStation:Set[FALSE]
